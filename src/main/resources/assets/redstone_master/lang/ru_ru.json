@@ -1,0 +1,10 @@
+{
+	"key.category.redstone_master": "Redstone Master",
+	"key.redstone_master.open_gui": "Открыть Redstone Master",
+	"gui.redstone_master.tab.tutorial": "Обучение",
+	"gui.redstone_master.tab.about_author": "Об авторе",
+	"gui.redstone_master.tab.about_mod": "О моде",
+	"gui.redstone_master.close": "Закрыть",
+	"gui.redstone_master.welcome": "Здравствуйте, вас приветствует Redstone Master - проект, обучающий редстоуну!",
+	"gui.redstone_master.placeholder": "Скоро тут что-нибудь будет..."
+}
