@@ -7,6 +7,8 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
 import ru.redstonemaster.client.gui.RedstoneMasterScreen;
+import ru.redstonemaster.config.ModConfig;
+import ru.redstonemaster.config.ModContentLanguage;
 
 import com.mojang.blaze3d.platform.InputConstants;
 
@@ -21,6 +23,8 @@ public class RedstoneMasterClient implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
+		ModConfig.load();
+
 		openGuiKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
 				"key.redstone_master.open_gui",
 				InputConstants.Type.KEYSYM,
@@ -30,12 +34,22 @@ public class RedstoneMasterClient implements ClientModInitializer {
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			while (openGuiKey.consumeClick()) {
-				if (client.screen instanceof RedstoneMasterScreen) {
-					client.setScreen(null);
-				} else {
-					client.setScreen(new RedstoneMasterScreen());
-				}
+				handleOpenKey(client);
 			}
 		});
+	}
+
+	public static void handleOpenKey(net.minecraft.client.Minecraft client) {
+		if (client.screen instanceof RedstoneMasterScreen) {
+			if (ModConfig.get().closeOnRepeatKey) {
+				client.setScreen(null);
+			}
+		} else {
+			ModConfig config = ModConfig.get();
+			if (config.initializeLanguageOnFirstOpen()) {
+				ModContentLanguage.clearCache();
+			}
+			client.setScreen(new RedstoneMasterScreen());
+		}
 	}
 }

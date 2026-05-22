@@ -4,16 +4,20 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
+import ru.redstonemaster.RedstoneMasterClient;
+import ru.redstonemaster.config.ModConfig;
+import ru.redstonemaster.config.ModContentLanguage;
 
 import java.util.List;
 
 public class RedstoneMasterScreen extends Screen {
-	private static final double PANEL_SCALE = 0.8;
+	public static final int CONTENT_INNER_PADDING = 6;
 	private static final int PANEL_PADDING = 8;
 	private static final int NAV_BAR_HEIGHT = 20;
 	private static final int ICON_BUTTON_SIZE = 20;
@@ -21,20 +25,21 @@ public class RedstoneMasterScreen extends Screen {
 	private static final int TITLE_TOP_PADDING = 4;
 	private static final int TITLE_TO_NAV_GAP = 2;
 	private static final int NAV_DOWN_OFFSET = 4;
-	private static final int CONTENT_TOP_GAP = 6;
-	/** Цвета в формате ARGB: без альфа-канала (0x00FFFFFF) текст не виден. */
+	private static final int CONTENT_TOP_GAP = 10;
 	private static final int TEXT_COLOR = 0xFFFFFFFF;
 	private static final int IMAGE_COLOR = 0xFFFFFFFF;
-	private static final int LINE_COLOR = 0xFF000000;
+	private static final int LINE_COLOR_NORMAL = 0xFF000000;
+	private static final int LINE_COLOR_HIGH_CONTRAST = 0xFFFFFFFF;
 	private static final int TITLE_COLOR = 0xFF800020;
 	private static final float TITLE_SCALE = 1.5f;
 	private static final Identifier MAIN_MENU_PHOTO = Identifier.fromNamespaceAndPath(
 			"redstone_master", "textures/gui/photo1_main_menu.png");
 	private static final int MAIN_MENU_PHOTO_SIZE = 1024;
-	private static final int CONTENT_INNER_PADDING = 6;
 	private static final int TEXT_TO_PHOTO_GAP = 8;
 
 	private RedstoneMasterTab currentTab = RedstoneMasterTab.MAIN_MENU;
+	private final RedstoneMasterSettingsPanel settingsPanel = new RedstoneMasterSettingsPanel(this);
+	private boolean sessionRestored;
 
 	private int panelX;
 	private int panelY;
@@ -49,18 +54,62 @@ public class RedstoneMasterScreen extends Screen {
 	private int contentHeight;
 
 	public RedstoneMasterScreen() {
-		super(Component.translatable("gui.redstone_master.title"));
+		super(ModContentLanguage.translatable("gui.redstone_master.title"));
 	}
 
 	@Override
 	protected void init() {
+		if (ModConfig.get().initializeLanguageOnFirstOpen()) {
+			ModContentLanguage.clearCache();
+		}
+		if (!this.sessionRestored) {
+			this.restoreSessionState();
+			this.sessionRestored = true;
+		}
+		this.rebuildAllWidgets();
+	}
+
+	@Override
+	public void onClose() {
+		this.persistSessionState();
+		super.onClose();
+	}
+
+	private void restoreSessionState() {
+		ModConfig config = ModConfig.get();
+		if (!config.rememberSession) {
+			this.currentTab = RedstoneMasterTab.MAIN_MENU;
+			this.settingsPanel.setScrollOffset(0);
+			return;
+		}
+		RedstoneMasterTab savedTab = RedstoneMasterTab.fromName(config.lastTab);
+		this.currentTab = savedTab != null ? savedTab : RedstoneMasterTab.MAIN_MENU;
+		this.settingsPanel.setScrollOffset(config.settingsScrollOffset);
+	}
+
+	private void persistSessionState() {
+		ModConfig config = ModConfig.get();
+		if (!config.rememberSession) {
+			return;
+		}
+		config.lastTab = this.currentTab.name();
+		config.settingsScrollOffset = this.settingsPanel.getScrollOffset();
+		config.save();
+	}
+
+	void rebuildAllWidgets() {
 		this.updatePanelBounds();
 		this.rebuildNavigation();
 	}
 
+	void rebuildSettingsWidgets() {
+		this.rebuildNavigation();
+	}
+
 	private void updatePanelBounds() {
-		this.panelWidth = (int) (this.width * PANEL_SCALE);
-		this.panelHeight = (int) (this.height * PANEL_SCALE);
+		double panelScale = ModConfig.get().panelScale;
+		this.panelWidth = (int) (this.width * panelScale);
+		this.panelHeight = (int) (this.height * panelScale);
 		this.panelX = (this.width - this.panelWidth) / 2;
 		this.panelY = (this.height - this.panelHeight) / 2;
 
@@ -79,6 +128,7 @@ public class RedstoneMasterScreen extends Screen {
 
 	private void rebuildNavigation() {
 		this.clearWidgets();
+		this.settingsPanel.dispose();
 
 		int innerX = this.panelX + PANEL_PADDING;
 		int innerWidth = this.panelWidth - PANEL_PADDING * 2;
@@ -87,26 +137,26 @@ public class RedstoneMasterScreen extends Screen {
 		int navButtonWidth = (innerWidth - closeAreaWidth) / 4;
 
 		this.addRenderableWidget(Button.builder(
-						Component.translatable("gui.redstone_master.tab.main_menu"),
+						ModContentLanguage.translatable("gui.redstone_master.tab.main_menu"),
 						button -> this.selectTab(RedstoneMasterTab.MAIN_MENU))
 				.bounds(innerX, this.navY, navButtonWidth, NAV_BAR_HEIGHT)
 				.build());
 
 		this.addRenderableWidget(Button.builder(
-						Component.translatable("gui.redstone_master.tab.tutorial"),
+						ModContentLanguage.translatable("gui.redstone_master.tab.tutorial"),
 						button -> this.selectTab(RedstoneMasterTab.TUTORIAL))
 				.bounds(innerX + navButtonWidth, this.navY, navButtonWidth, NAV_BAR_HEIGHT)
 				.build());
 
 		this.addRenderableWidget(Button.builder(
-						Component.translatable("gui.redstone_master.tab.settings"),
+						ModContentLanguage.translatable("gui.redstone_master.tab.settings"),
 						button -> this.selectTab(RedstoneMasterTab.SETTINGS))
 				.bounds(innerX + navButtonWidth * 2, this.navY, navButtonWidth, NAV_BAR_HEIGHT)
 				.build());
 
 		this.addRenderableWidget(Button.builder(
-						Component.translatable("gui.redstone_master.search"),
-						button -> this.selectTab(RedstoneMasterTab.SEARCH))
+						ModContentLanguage.translatable("gui.redstone_master.tab.profile"),
+						button -> this.selectTab(RedstoneMasterTab.PROFILE))
 				.bounds(innerX + navButtonWidth * 3, this.navY, navButtonWidth, NAV_BAR_HEIGHT)
 				.build());
 
@@ -115,19 +165,49 @@ public class RedstoneMasterScreen extends Screen {
 						Component.literal("X"),
 						button -> this.onClose())
 				.bounds(closeX, this.navY, ICON_BUTTON_SIZE, ICON_BUTTON_SIZE)
-				.tooltip(Tooltip.create(Component.translatable("gui.redstone_master.close")))
+				.tooltip(Tooltip.create(ModContentLanguage.translatable("gui.redstone_master.close")))
 				.build());
+
+		if (this.currentTab == RedstoneMasterTab.SETTINGS) {
+			this.settingsPanel.rebuildWidgets();
+		}
 	}
 
 	private void selectTab(RedstoneMasterTab tab) {
+		if (this.currentTab == RedstoneMasterTab.SETTINGS && tab != RedstoneMasterTab.SETTINGS) {
+			this.persistSettingsScroll();
+		}
 		this.currentTab = tab;
+		this.rebuildNavigation();
+	}
+
+	private void persistSettingsScroll() {
+		if (ModConfig.get().rememberSession) {
+			ModConfig.get().settingsScrollOffset = this.settingsPanel.getScrollOffset();
+		}
 	}
 
 	@Override
 	public void resize(int width, int height) {
 		super.resize(width, height);
-		this.updatePanelBounds();
-		this.rebuildNavigation();
+		this.rebuildAllWidgets();
+	}
+
+	@Override
+	public boolean keyPressed(KeyEvent event) {
+		if (RedstoneMasterClient.openGuiKey.matches(event) && ModConfig.get().closeOnRepeatKey) {
+			this.onClose();
+			return true;
+		}
+		return super.keyPressed(event);
+	}
+
+	@Override
+	public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+		if (this.currentTab == RedstoneMasterTab.SETTINGS && this.settingsPanel.mouseScrolled(scrollX, scrollY)) {
+			return true;
+		}
+		return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
 	}
 
 	@Override
@@ -141,6 +221,13 @@ public class RedstoneMasterScreen extends Screen {
 		super.render(graphics, mouseX, mouseY, delta);
 		this.renderDecorations(graphics);
 		this.renderContent(graphics);
+		if (this.currentTab == RedstoneMasterTab.SETTINGS) {
+			this.settingsPanel.renderLabels(graphics);
+		}
+	}
+
+	private int getLineColor() {
+		return ModConfig.get().highContrastBorders ? LINE_COLOR_HIGH_CONTRAST : LINE_COLOR_NORMAL;
 	}
 
 	private int getScaledTitleHeight() {
@@ -148,7 +235,7 @@ public class RedstoneMasterScreen extends Screen {
 	}
 
 	private Component getTitleComponent() {
-		return Component.translatable("gui.redstone_master.title")
+		return Component.literal(ModContentLanguage.get("gui.redstone_master.title"))
 				.withStyle(Style.EMPTY.withBold(true));
 	}
 
@@ -171,26 +258,26 @@ public class RedstoneMasterScreen extends Screen {
 	}
 
 	private void renderDecorations(GuiGraphics graphics) {
-		graphics.renderOutline(this.panelX, this.panelY, this.panelWidth, this.panelHeight, LINE_COLOR);
+		int lineColor = this.getLineColor();
+		graphics.renderOutline(this.panelX, this.panelY, this.panelWidth, this.panelHeight, lineColor);
 		this.renderTitle(graphics);
 
 		graphics.hLine(
 				this.panelX + PANEL_PADDING,
 				this.panelX + this.panelWidth - PANEL_PADDING,
 				this.separatorY,
-				LINE_COLOR
+				lineColor
 		);
 
-		graphics.renderOutline(this.contentX, this.contentY, this.contentWidth, this.contentHeight, LINE_COLOR);
+		graphics.renderOutline(this.contentX, this.contentY, this.contentWidth, this.contentHeight, lineColor);
 	}
 
 	private void renderContent(GuiGraphics graphics) {
-		if (this.currentTab == RedstoneMasterTab.MAIN_MENU) {
-			this.renderMainMenuContent(graphics);
-			return;
+		switch (this.currentTab) {
+			case MAIN_MENU -> this.renderMainMenuContent(graphics);
+			case SETTINGS -> { /* подписи рисуются в settingsPanel.renderLabels */ }
+			default -> this.renderTextContent(graphics, this.currentTab.getContent());
 		}
-
-		this.renderTextContent(graphics, this.currentTab.getContent());
 	}
 
 	private void renderMainMenuContent(GuiGraphics graphics) {
@@ -250,6 +337,33 @@ public class RedstoneMasterScreen extends Screen {
 
 	@Override
 	public boolean isPauseScreen() {
-		return this.minecraft != null && this.minecraft.isSingleplayer();
+		ModConfig config = ModConfig.get();
+		return config.pauseOnOpen && this.minecraft != null && this.minecraft.isSingleplayer();
+	}
+
+	int getContentX() {
+		return this.contentX;
+	}
+
+	int getContentY() {
+		return this.contentY;
+	}
+
+	int getContentWidth() {
+		return this.contentWidth;
+	}
+
+	int getContentHeight() {
+		return this.contentHeight;
+	}
+
+	int getNavY() {
+		return this.navY;
+	}
+
+	<T extends net.minecraft.client.gui.components.events.GuiEventListener & net.minecraft.client.gui.components.Renderable & net.minecraft.client.gui.narration.NarratableEntry> T addContentWidget(
+			T widget
+	) {
+		return this.addRenderableWidget(widget);
 	}
 }

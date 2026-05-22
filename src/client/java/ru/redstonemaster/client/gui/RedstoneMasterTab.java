@@ -1,12 +1,13 @@
 package ru.redstonemaster.client.gui;
 
 import net.minecraft.network.chat.Component;
+import ru.redstonemaster.config.ModContentLanguage;
 
 public enum RedstoneMasterTab {
 	MAIN_MENU("gui.redstone_master.welcome"),
 	TUTORIAL("gui.redstone_master.placeholder"),
-	SETTINGS("gui.redstone_master.placeholder"),
-	SEARCH("gui.redstone_master.placeholder");
+	SETTINGS(null),
+	PROFILE("gui.redstone_master.placeholder");
 
 	private final String translationKey;
 
@@ -15,6 +16,20 @@ public enum RedstoneMasterTab {
 	}
 
 	public Component getContent() {
-		return Component.translatable(this.translationKey);
+		if (this.translationKey == null) {
+			return Component.empty();
+		}
+		return ModContentLanguage.translatable(this.translationKey);
+	}
+
+	public static RedstoneMasterTab fromName(String name) {
+		if (name == null || name.isBlank()) {
+			return null;
+		}
+		try {
+			return RedstoneMasterTab.valueOf(name);
+		} catch (IllegalArgumentException e) {
+			return null;
+		}
 	}
 }
