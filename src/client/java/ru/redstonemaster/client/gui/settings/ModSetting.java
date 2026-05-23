@@ -4,39 +4,44 @@ import ru.redstonemaster.config.ModContentLanguage;
 
 public enum ModSetting {
 	PANEL_SCALE(
-			"gui.redstone_master.settings.section.interface",
-			"gui.redstone_master.settings.panel_scale",
+			"gui.redstone-master.settings.section.interface",
+			"gui.redstone-master.settings.panel_scale",
 			"интерфейс размер окна мода panel scale window size"
 	),
 	PAUSE_ON_OPEN(
-			"gui.redstone_master.settings.section.interface",
-			"gui.redstone_master.settings.pause_on_open",
+			"gui.redstone-master.settings.section.interface",
+			"gui.redstone-master.settings.pause_on_open",
 			"интерфейс пауза при открытии pause singleplayer"
 	),
 	HIGH_CONTRAST(
-			"gui.redstone_master.settings.section.interface",
-			"gui.redstone_master.settings.high_contrast",
+			"gui.redstone-master.settings.section.interface",
+			"gui.redstone-master.settings.high_contrast",
 			"интерфейс высокий контраст рамок contrast border"
 	),
 	AUTO_LANGUAGE(
-			"gui.redstone_master.settings.section.interface",
-			"gui.redstone_master.settings.auto_language",
+			"gui.redstone-master.settings.section.interface",
+			"gui.redstone-master.settings.auto_language",
 			"интерфейс язык автоподбор языка auto language detect"
 	),
 	MANUAL_LANGUAGE(
-			"gui.redstone_master.settings.section.interface",
-			"gui.redstone_master.settings.manual_language",
+			"gui.redstone-master.settings.section.interface",
+			"gui.redstone-master.settings.manual_language",
 			"интерфейс выбор языка language manual"
 	),
 	REMEMBER_SESSION(
-			"gui.redstone_master.settings.section.controls",
-			"gui.redstone_master.settings.remember_session",
+			"gui.redstone-master.settings.section.controls",
+			"gui.redstone-master.settings.remember_session",
 			"управление сохранять вкладку позицию remember session tab scroll"
 	),
 	CLOSE_ON_REPEAT(
-			"gui.redstone_master.settings.section.controls",
-			"gui.redstone_master.settings.close_on_repeat",
+			"gui.redstone-master.settings.section.controls",
+			"gui.redstone-master.settings.close_on_repeat",
 			"управление закрывать повторное нажатие close key toggle"
+	),
+	TUTORIAL_COLLAPSE_OTHERS(
+			"gui.redstone-master.settings.section.tutorial",
+			"gui.redstone-master.settings.tutorial_collapse_other",
+			"обучение сворачивать другие разделы collapse section accordion single"
 	);
 
 	private final String sectionKey;

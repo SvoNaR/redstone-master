@@ -11,6 +11,7 @@ public final class ModSettingDefaults {
 	public static final boolean HIGH_CONTRAST_BORDERS = false;
 	public static final boolean AUTO_LANGUAGE = true;
 	public static final boolean CLOSE_ON_REPEAT_KEY = true;
+	public static final boolean TUTORIAL_COLLAPSE_OTHER_SECTIONS = false;
 	public static final boolean REMEMBER_SESSION = true;
 
 	private ModSettingDefaults() {
@@ -28,6 +29,7 @@ public final class ModSettingDefaults {
 			case MANUAL_LANGUAGE -> config.manualLanguage = config.getDefaultModLanguage();
 			case REMEMBER_SESSION -> config.rememberSession = REMEMBER_SESSION;
 			case CLOSE_ON_REPEAT -> config.closeOnRepeatKey = CLOSE_ON_REPEAT_KEY;
+			case TUTORIAL_COLLAPSE_OTHERS -> config.tutorialCollapseOtherSections = TUTORIAL_COLLAPSE_OTHER_SECTIONS;
 		}
 	}
 

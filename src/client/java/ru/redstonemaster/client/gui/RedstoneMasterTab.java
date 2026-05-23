@@ -4,10 +4,10 @@ import net.minecraft.network.chat.Component;
 import ru.redstonemaster.config.ModContentLanguage;
 
 public enum RedstoneMasterTab {
-	MAIN_MENU("gui.redstone_master.welcome"),
-	TUTORIAL("gui.redstone_master.placeholder"),
+	MAIN_MENU("gui.redstone-master.main_menu.body"),
+	TUTORIAL("gui.redstone-master.placeholder"),
 	SETTINGS(null),
-	PROFILE("gui.redstone_master.placeholder");
+	PROFILE("gui.redstone-master.placeholder");
 
 	private final String translationKey;
 

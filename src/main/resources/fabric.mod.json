@@ -1,6 +1,6 @@
 {
 	"schemaVersion": 1,
-	"id": "redstone_master",
+	"id": "redstone-master",
 	"version": "${version}",
 	"name": "Redstone Master",
 	"description": "Обучающий мод по редстоун-механикам Minecraft.",
@@ -8,7 +8,7 @@
 		"Redstone Master"
 	],
 	"license": "CC0-1.0",
-	"icon": "assets/redstone_master/icon.png",
+	"icon": "assets/redstone-master/icon.png",
 	"environment": "client",
 	"entrypoints": {
 		"client": [

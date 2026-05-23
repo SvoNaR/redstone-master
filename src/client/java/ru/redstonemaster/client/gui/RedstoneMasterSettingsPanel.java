@@ -22,9 +22,10 @@ final class RedstoneMasterSettingsPanel {
 	private static final int ROW_GAP = 2;
 	private static final int SEARCH_BOTTOM_GAP = 8;
 	private static final int DISCLAIMER_GAP = 4;
-	private static final String DISCLAIMER_KEY = "gui.redstone_master.settings.disclaimer";
-	private static final String INTERFACE_SECTION_KEY = "gui.redstone_master.settings.section.interface";
-	private static final String CONTROLS_SECTION_KEY = "gui.redstone_master.settings.section.controls";
+	private static final String DISCLAIMER_KEY = "gui.redstone-master.settings.disclaimer";
+	private static final String INTERFACE_SECTION_KEY = "gui.redstone-master.settings.section.interface";
+	private static final String CONTROLS_SECTION_KEY = "gui.redstone-master.settings.section.controls";
+	private static final String TUTORIAL_SECTION_KEY = "gui.redstone-master.settings.section.tutorial";
 	private static final int VALUE_BUTTON_WIDTH = 110;
 	private static final int RESET_BUTTON_MIN_WIDTH = 44;
 	private static final int RESET_BUTTON_PADDING = 8;
@@ -80,7 +81,8 @@ final class RedstoneMasterSettingsPanel {
 			}
 			if (addedSections.add(setting.getSectionKey())) {
 				if (INTERFACE_SECTION_KEY.equals(setting.getSectionKey())
-						|| CONTROLS_SECTION_KEY.equals(setting.getSectionKey())) {
+						|| CONTROLS_SECTION_KEY.equals(setting.getSectionKey())
+						|| TUTORIAL_SECTION_KEY.equals(setting.getSectionKey())) {
 					y += this.screen.getFont().lineHeight;
 				}
 				this.layoutRows.add(LayoutRow.section(setting.getSectionKey(), y));
@@ -106,7 +108,7 @@ final class RedstoneMasterSettingsPanel {
 		int resetAllButtonY = this.getSettingButtonY(resetAllY, ROW_HEIGHT);
 		ModConfig config = ModConfig.get();
 		this.resetAllButton = Button.builder(
-						ModContentLanguage.translatable("gui.redstone_master.settings.reset_all"),
+						ModContentLanguage.translatable("gui.redstone-master.settings.reset_all"),
 						button -> this.openResetAllConfirm())
 				.bounds(innerX, resetAllButtonY, innerWidth, ROW_HEIGHT)
 				.build();
@@ -119,10 +121,10 @@ final class RedstoneMasterSettingsPanel {
 				searchY,
 				innerWidth,
 				searchHeight,
-				ModContentLanguage.translatable("gui.redstone_master.settings.search_hint")
+				ModContentLanguage.translatable("gui.redstone-master.settings.search_hint")
 		);
 		this.searchBox.setMaxLength(64);
-		this.searchBox.setHint(ModContentLanguage.translatable("gui.redstone_master.settings.search_hint"));
+		this.searchBox.setHint(ModContentLanguage.translatable("gui.redstone-master.settings.search_hint"));
 		this.searchBox.setValue(this.searchQuery);
 		this.searchBox.setResponder(value -> {
 			this.searchQuery = value;
@@ -136,18 +138,18 @@ final class RedstoneMasterSettingsPanel {
 
 	private int getResetButtonWidth() {
 		int textWidth = this.screen.getFont()
-				.width(ModContentLanguage.get("gui.redstone_master.settings.reset"));
+				.width(ModContentLanguage.get("gui.redstone-master.settings.reset"));
 		return Math.max(RESET_BUTTON_MIN_WIDTH, textWidth + RESET_BUTTON_PADDING);
 	}
 
 	private Button createResetButton(ModSetting setting, int x, int y, int width) {
 		ModConfig config = ModConfig.get();
 		Button button = Button.builder(
-						ModContentLanguage.translatable("gui.redstone_master.settings.reset"),
+						ModContentLanguage.translatable("gui.redstone-master.settings.reset"),
 						b -> this.resetSetting(setting))
 				.bounds(x, y, width, ROW_HEIGHT)
 				.tooltip(Tooltip.create(
-						ModContentLanguage.translatable("gui.redstone_master.settings.reset.tooltip")))
+						ModContentLanguage.translatable("gui.redstone-master.settings.reset.tooltip")))
 				.build();
 		button.active = !config.isSettingAtDefault(setting);
 		return button;
@@ -176,10 +178,10 @@ final class RedstoneMasterSettingsPanel {
 					}
 					minecraft.setScreen(this.screen);
 				},
-				ModContentLanguage.translatable("gui.redstone_master.settings.reset_all.title"),
-				ModContentLanguage.translatable("gui.redstone_master.settings.reset_all.message"),
-				ModContentLanguage.translatable("gui.redstone_master.settings.reset_all.confirm"),
-				ModContentLanguage.translatable("gui.redstone_master.settings.reset_all.cancel")
+				ModContentLanguage.translatable("gui.redstone-master.settings.reset_all.title"),
+				ModContentLanguage.translatable("gui.redstone-master.settings.reset_all.message"),
+				ModContentLanguage.translatable("gui.redstone-master.settings.reset_all.confirm"),
+				ModContentLanguage.translatable("gui.redstone-master.settings.reset_all.cancel")
 		));
 	}
 
@@ -208,7 +210,7 @@ final class RedstoneMasterSettingsPanel {
 							})
 					.bounds(x, y, width, ROW_HEIGHT)
 					.tooltip(Tooltip.create(
-							ModContentLanguage.translatable("gui.redstone_master.settings.pause_on_open.tooltip")))
+							ModContentLanguage.translatable("gui.redstone-master.settings.pause_on_open.tooltip")))
 					.build();
 			case HIGH_CONTRAST -> Button.builder(
 							this.getToggleLabel(config.highContrastBorders),
@@ -231,7 +233,7 @@ final class RedstoneMasterSettingsPanel {
 							})
 					.bounds(x, y, width, ROW_HEIGHT)
 					.tooltip(Tooltip.create(
-							ModContentLanguage.translatable("gui.redstone_master.settings.auto_language.tooltip")))
+							ModContentLanguage.translatable("gui.redstone-master.settings.auto_language.tooltip")))
 					.build();
 			case REMEMBER_SESSION -> Button.builder(
 							this.getToggleLabel(config.rememberSession),
@@ -242,7 +244,7 @@ final class RedstoneMasterSettingsPanel {
 							})
 					.bounds(x, y, width, ROW_HEIGHT)
 					.tooltip(Tooltip.create(
-							ModContentLanguage.translatable("gui.redstone_master.settings.remember_session.tooltip")))
+							ModContentLanguage.translatable("gui.redstone-master.settings.remember_session.tooltip")))
 					.build();
 			case MANUAL_LANGUAGE -> {
 				Component label = config.autoLanguage
@@ -268,19 +270,30 @@ final class RedstoneMasterSettingsPanel {
 							})
 					.bounds(x, y, width, ROW_HEIGHT)
 					.tooltip(Tooltip.create(
-							ModContentLanguage.translatable("gui.redstone_master.settings.close_on_repeat.tooltip")))
+							ModContentLanguage.translatable("gui.redstone-master.settings.close_on_repeat.tooltip")))
+					.build();
+			case TUTORIAL_COLLAPSE_OTHERS -> Button.builder(
+							this.getToggleLabel(config.tutorialCollapseOtherSections),
+							button -> {
+								config.tutorialCollapseOtherSections = !config.tutorialCollapseOtherSections;
+								config.save();
+								this.screen.rebuildSettingsWidgets();
+							})
+					.bounds(x, y, width, ROW_HEIGHT)
+					.tooltip(Tooltip.create(ModContentLanguage.translatable(
+							"gui.redstone-master.settings.tutorial_collapse_other.tooltip")))
 					.build();
 		};
 	}
 
 	private Component getPanelScaleLabel(ModConfig config) {
 		int percent = (int) Math.round(config.panelScale * 100);
-		return ModContentLanguage.translatable("gui.redstone_master.settings.panel_scale.value", percent);
+		return ModContentLanguage.translatable("gui.redstone-master.settings.panel_scale.value", percent);
 	}
 
 	private Component getToggleLabel(boolean enabled) {
 		return ModContentLanguage.translatable(
-				enabled ? "gui.redstone_master.settings.value.on" : "gui.redstone_master.settings.value.off"
+				enabled ? "gui.redstone-master.settings.value.on" : "gui.redstone-master.settings.value.off"
 		);
 	}
 

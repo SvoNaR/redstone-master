@@ -7,6 +7,8 @@ import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.Resource;
+import ru.redstonemaster.client.gui.tutorial.TutorialCatalog;
+import ru.redstonemaster.client.gui.tutorial.TutorialTextures;
 
 import java.io.InputStreamReader;
 import java.lang.reflect.Type;
@@ -28,6 +30,8 @@ public final class ModContentLanguage {
 	public static void clearCache() {
 		ruStrings = null;
 		enStrings = null;
+		TutorialCatalog.clearCache();
+		TutorialTextures.clearCache();
 	}
 
 	public static Component translatable(String key) {
@@ -52,9 +56,9 @@ public final class ModContentLanguage {
 
 	public static Component getLanguageDisplayName(String languageCode) {
 		String nameKey = switch (languageCode) {
-			case "ru_ru" -> "gui.redstone_master.settings.language.ru";
-			case "en_us" -> "gui.redstone_master.settings.language.en";
-			default -> "gui.redstone_master.settings.language.unknown";
+			case "ru_ru" -> "gui.redstone-master.settings.language.ru";
+			case "en_us" -> "gui.redstone-master.settings.language.en";
+			default -> "gui.redstone-master.settings.language.unknown";
 		};
 		return Component.literal(getMap(languageCode).getOrDefault(nameKey, nameKey));
 	}
@@ -82,7 +86,7 @@ public final class ModContentLanguage {
 			return Map.of();
 		}
 
-		Identifier id = Identifier.fromNamespaceAndPath("redstone_master", "lang/" + code + ".json");
+		Identifier id = Identifier.fromNamespaceAndPath("redstone-master", "lang/" + code + ".json");
 		try {
 			Resource resource = client.getResourceManager().getResourceOrThrow(id);
 			try (InputStreamReader reader = new InputStreamReader(resource.open(), StandardCharsets.UTF_8)) {

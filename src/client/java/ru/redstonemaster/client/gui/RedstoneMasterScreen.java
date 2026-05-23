@@ -4,15 +4,18 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.TextColor;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
-import ru.redstonemaster.RedstoneMasterClient;
 import ru.redstonemaster.config.ModConfig;
 import ru.redstonemaster.config.ModContentLanguage;
+
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
@@ -33,12 +36,27 @@ public class RedstoneMasterScreen extends Screen {
 	private static final int TITLE_COLOR = 0xFF800020;
 	private static final float TITLE_SCALE = 1.5f;
 	private static final Identifier MAIN_MENU_PHOTO = Identifier.fromNamespaceAndPath(
-			"redstone_master", "textures/gui/photo1_main_menu.png");
-	private static final int MAIN_MENU_PHOTO_SIZE = 1024;
-	private static final int TEXT_TO_PHOTO_GAP = 8;
+			"redstone-master", "textures/gui/photo1_main_menu.png");
+	private static final int MAIN_MENU_PHOTO_TEXTURE_SIZE = 1024;
+	private static final int MAIN_MENU_PHOTO_DISPLAY_SIZE = 40;
+	private static final int MAIN_MENU_PHOTO_FRAME_PADDING = 2;
+	private static final int MAIN_MENU_CREDIT_GROUP_PADDING = 4;
+	private static final int MAIN_MENU_CREDIT_GAP = 4;
+	private static final float MAIN_MENU_GREETING_SCALE = 1.5f;
+	private static final int MAIN_MENU_GREETING_BOTTOM_GAP_LINES = 1;
+	private static final int MAIN_MENU_BLOCK_GAP = 4;
+	private static final int CREDIT_SVONAR_COLOR = 0xFFFF4444;
+	private static final int CREDIT_FOXICY_COLOR = 0xFF55FF55;
+	private static final String MAIN_MENU_BRAND = "Redstone Master";
+	private static final String MAIN_MENU_GREETING_KEY = "gui.redstone-master.main_menu.greeting";
+	private static final String MAIN_MENU_TITLE_SUFFIX_KEY = "gui.redstone-master.main_menu.title_suffix";
+	private static final String MAIN_MENU_CREDIT_PREFIX_KEY = "gui.redstone-master.main_menu.credit_prefix";
 
 	private RedstoneMasterTab currentTab = RedstoneMasterTab.MAIN_MENU;
 	private final RedstoneMasterSettingsPanel settingsPanel = new RedstoneMasterSettingsPanel(this);
+	private final RedstoneMasterTutorialPanel tutorialPanel = new RedstoneMasterTutorialPanel(this);
+	@Nullable
+	private final Screen previousScreen;
 	private boolean sessionRestored;
 
 	private int panelX;
@@ -53,8 +71,9 @@ public class RedstoneMasterScreen extends Screen {
 	private int contentWidth;
 	private int contentHeight;
 
-	public RedstoneMasterScreen() {
-		super(ModContentLanguage.translatable("gui.redstone_master.title"));
+	public RedstoneMasterScreen(@Nullable Screen previousScreen) {
+		super(ModContentLanguage.translatable("gui.redstone-master.title"));
+		this.previousScreen = previousScreen;
 	}
 
 	@Override
@@ -72,7 +91,9 @@ public class RedstoneMasterScreen extends Screen {
 	@Override
 	public void onClose() {
 		this.persistSessionState();
-		super.onClose();
+		if (this.minecraft != null) {
+			this.minecraft.setScreen(this.previousScreen);
+		}
 	}
 
 	private void restoreSessionState() {
@@ -80,11 +101,15 @@ public class RedstoneMasterScreen extends Screen {
 		if (!config.rememberSession) {
 			this.currentTab = RedstoneMasterTab.MAIN_MENU;
 			this.settingsPanel.setScrollOffset(0);
+			this.tutorialPanel.setScrollOffset(0);
+			this.tutorialPanel.restoreExpandedSections("");
 			return;
 		}
 		RedstoneMasterTab savedTab = RedstoneMasterTab.fromName(config.lastTab);
 		this.currentTab = savedTab != null ? savedTab : RedstoneMasterTab.MAIN_MENU;
 		this.settingsPanel.setScrollOffset(config.settingsScrollOffset);
+		this.tutorialPanel.setScrollOffset(config.tutorialScrollOffset);
+		this.tutorialPanel.restoreExpandedSections(config.expandedTutorialSections);
 	}
 
 	private void persistSessionState() {
@@ -94,6 +119,8 @@ public class RedstoneMasterScreen extends Screen {
 		}
 		config.lastTab = this.currentTab.name();
 		config.settingsScrollOffset = this.settingsPanel.getScrollOffset();
+		config.tutorialScrollOffset = this.tutorialPanel.getListScrollOffsetForPersistence();
+		config.expandedTutorialSections = this.tutorialPanel.getExpandedSectionsCsv();
 		config.save();
 	}
 
@@ -103,6 +130,10 @@ public class RedstoneMasterScreen extends Screen {
 	}
 
 	void rebuildSettingsWidgets() {
+		this.rebuildNavigation();
+	}
+
+	void rebuildTutorialWidgets() {
 		this.rebuildNavigation();
 	}
 
@@ -129,6 +160,7 @@ public class RedstoneMasterScreen extends Screen {
 	private void rebuildNavigation() {
 		this.clearWidgets();
 		this.settingsPanel.dispose();
+		this.tutorialPanel.dispose();
 
 		int innerX = this.panelX + PANEL_PADDING;
 		int innerWidth = this.panelWidth - PANEL_PADDING * 2;
@@ -137,25 +169,25 @@ public class RedstoneMasterScreen extends Screen {
 		int navButtonWidth = (innerWidth - closeAreaWidth) / 4;
 
 		this.addRenderableWidget(Button.builder(
-						ModContentLanguage.translatable("gui.redstone_master.tab.main_menu"),
+						ModContentLanguage.translatable("gui.redstone-master.tab.main_menu"),
 						button -> this.selectTab(RedstoneMasterTab.MAIN_MENU))
 				.bounds(innerX, this.navY, navButtonWidth, NAV_BAR_HEIGHT)
 				.build());
 
 		this.addRenderableWidget(Button.builder(
-						ModContentLanguage.translatable("gui.redstone_master.tab.tutorial"),
+						ModContentLanguage.translatable("gui.redstone-master.tab.tutorial"),
 						button -> this.selectTab(RedstoneMasterTab.TUTORIAL))
 				.bounds(innerX + navButtonWidth, this.navY, navButtonWidth, NAV_BAR_HEIGHT)
 				.build());
 
 		this.addRenderableWidget(Button.builder(
-						ModContentLanguage.translatable("gui.redstone_master.tab.settings"),
+						ModContentLanguage.translatable("gui.redstone-master.tab.settings"),
 						button -> this.selectTab(RedstoneMasterTab.SETTINGS))
 				.bounds(innerX + navButtonWidth * 2, this.navY, navButtonWidth, NAV_BAR_HEIGHT)
 				.build());
 
 		this.addRenderableWidget(Button.builder(
-						ModContentLanguage.translatable("gui.redstone_master.tab.profile"),
+						ModContentLanguage.translatable("gui.redstone-master.tab.profile"),
 						button -> this.selectTab(RedstoneMasterTab.PROFILE))
 				.bounds(innerX + navButtonWidth * 3, this.navY, navButtonWidth, NAV_BAR_HEIGHT)
 				.build());
@@ -165,11 +197,14 @@ public class RedstoneMasterScreen extends Screen {
 						Component.literal("X"),
 						button -> this.onClose())
 				.bounds(closeX, this.navY, ICON_BUTTON_SIZE, ICON_BUTTON_SIZE)
-				.tooltip(Tooltip.create(ModContentLanguage.translatable("gui.redstone_master.close")))
+				.tooltip(Tooltip.create(ModContentLanguage.translatable("gui.redstone-master.close")))
 				.build());
 
 		if (this.currentTab == RedstoneMasterTab.SETTINGS) {
 			this.settingsPanel.rebuildWidgets();
+		}
+		if (this.currentTab == RedstoneMasterTab.TUTORIAL) {
+			this.tutorialPanel.rebuildWidgets();
 		}
 	}
 
@@ -177,8 +212,20 @@ public class RedstoneMasterScreen extends Screen {
 		if (this.currentTab == RedstoneMasterTab.SETTINGS && tab != RedstoneMasterTab.SETTINGS) {
 			this.persistSettingsScroll();
 		}
+		if (this.currentTab == RedstoneMasterTab.TUTORIAL && tab != RedstoneMasterTab.TUTORIAL) {
+			this.persistTutorialScroll();
+			this.tutorialPanel.leaveTab();
+		}
 		this.currentTab = tab;
 		this.rebuildNavigation();
+	}
+
+	private void persistTutorialScroll() {
+		if (ModConfig.get().rememberSession) {
+			ModConfig config = ModConfig.get();
+			config.tutorialScrollOffset = this.tutorialPanel.getListScrollOffsetForPersistence();
+			config.expandedTutorialSections = this.tutorialPanel.getExpandedSectionsCsv();
+		}
 	}
 
 	private void persistSettingsScroll() {
@@ -194,17 +241,11 @@ public class RedstoneMasterScreen extends Screen {
 	}
 
 	@Override
-	public boolean keyPressed(KeyEvent event) {
-		if (RedstoneMasterClient.openGuiKey.matches(event) && ModConfig.get().closeOnRepeatKey) {
-			this.onClose();
-			return true;
-		}
-		return super.keyPressed(event);
-	}
-
-	@Override
 	public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
 		if (this.currentTab == RedstoneMasterTab.SETTINGS && this.settingsPanel.mouseScrolled(scrollX, scrollY)) {
+			return true;
+		}
+		if (this.currentTab == RedstoneMasterTab.TUTORIAL && this.tutorialPanel.mouseScrolled(scrollX, scrollY)) {
 			return true;
 		}
 		return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
@@ -212,7 +253,15 @@ public class RedstoneMasterScreen extends Screen {
 
 	@Override
 	public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-		// Оставляем 20% экрана прозрачными — виден мир или фон главного меню.
+		if (this.shouldShowTitleMenuPanorama()) {
+			this.renderPanorama(graphics, delta);
+			return;
+		}
+		// В мире — прозрачные края, виден игровой мир.
+	}
+
+	private boolean shouldShowTitleMenuPanorama() {
+		return this.previousScreen instanceof TitleScreen;
 	}
 
 	@Override
@@ -223,6 +272,9 @@ public class RedstoneMasterScreen extends Screen {
 		this.renderContent(graphics);
 		if (this.currentTab == RedstoneMasterTab.SETTINGS) {
 			this.settingsPanel.renderLabels(graphics);
+		}
+		if (this.currentTab == RedstoneMasterTab.TUTORIAL) {
+			this.tutorialPanel.render(graphics);
 		}
 	}
 
@@ -235,7 +287,7 @@ public class RedstoneMasterScreen extends Screen {
 	}
 
 	private Component getTitleComponent() {
-		return Component.literal(ModContentLanguage.get("gui.redstone_master.title"))
+		return Component.literal(ModContentLanguage.get("gui.redstone-master.title"))
 				.withStyle(Style.EMPTY.withBold(true));
 	}
 
@@ -276,6 +328,7 @@ public class RedstoneMasterScreen extends Screen {
 		switch (this.currentTab) {
 			case MAIN_MENU -> this.renderMainMenuContent(graphics);
 			case SETTINGS -> { /* подписи рисуются в settingsPanel.renderLabels */ }
+			case TUTORIAL -> { /* tutorialPanel.render */ }
 			default -> this.renderTextContent(graphics, this.currentTab.getContent());
 		}
 	}
@@ -284,36 +337,101 @@ public class RedstoneMasterScreen extends Screen {
 		int textX = this.contentX + CONTENT_INNER_PADDING;
 		int textY = this.contentY + CONTENT_INNER_PADDING;
 		int textWidth = this.contentWidth - CONTENT_INNER_PADDING * 2;
+		int maxTextBottom = this.contentY + this.contentHeight - CONTENT_INNER_PADDING - this.getMainMenuFooterReservedHeight();
 
-		textY = this.renderTextContentAt(graphics, RedstoneMasterTab.MAIN_MENU.getContent(), textX, textY, textWidth);
-		textY += TEXT_TO_PHOTO_GAP;
+		textY = this.renderScaledTextBlock(
+				graphics,
+				ModContentLanguage.translatable(MAIN_MENU_GREETING_KEY),
+				textX,
+				textY,
+				textWidth,
+				MAIN_MENU_GREETING_SCALE,
+				maxTextBottom
+		);
+		textY += this.font.lineHeight * MAIN_MENU_GREETING_BOTTOM_GAP_LINES;
+		textY = this.renderStyledTextBlock(
+				graphics,
+				this.buildMainMenuTitleLine(),
+				textX,
+				textY,
+				textWidth,
+				maxTextBottom
+		);
+		textY += MAIN_MENU_BLOCK_GAP;
+		this.renderStyledTextBlock(
+				graphics,
+				RedstoneMasterTab.MAIN_MENU.getContent(),
+				textX,
+				textY,
+				textWidth,
+				maxTextBottom
+		);
+		this.renderMainMenuFooter(graphics);
+	}
 
-		int photoAreaBottom = this.contentY + this.contentHeight - CONTENT_INNER_PADDING;
-		int photoAreaHeight = photoAreaBottom - textY;
-		int photoAreaWidth = this.contentWidth - CONTENT_INNER_PADDING * 2;
+	private Component buildMainMenuTitleLine() {
+		return this.coloredLiteral(MAIN_MENU_BRAND, TITLE_COLOR)
+				.append(this.coloredLiteral(ModContentLanguage.get(MAIN_MENU_TITLE_SUFFIX_KEY), TEXT_COLOR));
+	}
 
-		if (photoAreaHeight <= 0 || photoAreaWidth <= 0) {
-			return;
-		}
+	private Component buildMainMenuCredit() {
+		return this.coloredLiteral(ModContentLanguage.get(MAIN_MENU_CREDIT_PREFIX_KEY), TEXT_COLOR)
+				.append(this.coloredLiteral("SvoNaR", CREDIT_SVONAR_COLOR))
+				.append(this.coloredLiteral(" & ", TEXT_COLOR))
+				.append(this.coloredLiteral("foxicy", CREDIT_FOXICY_COLOR))
+				.append(this.coloredLiteral(" <3", TEXT_COLOR));
+	}
 
-		int photoSize = Math.min(photoAreaWidth, photoAreaHeight);
-		int photoX = this.contentX + (this.contentWidth - photoSize) / 2;
+	private MutableComponent coloredLiteral(String text, int color) {
+		return Component.literal(text)
+				.withStyle(style -> style.withColor(TextColor.fromRgb(color & 0xFFFFFF)));
+	}
+
+	private int getMainMenuFooterReservedHeight() {
+		int photoFrameSize = MAIN_MENU_PHOTO_DISPLAY_SIZE + MAIN_MENU_PHOTO_FRAME_PADDING * 2;
+		int contentHeight = Math.max(this.font.lineHeight, photoFrameSize);
+		return contentHeight + MAIN_MENU_CREDIT_GROUP_PADDING * 2;
+	}
+
+	private void renderMainMenuFooter(GuiGraphics graphics) {
+		int lineColor = this.getLineColor();
+		Component credit = this.buildMainMenuCredit();
+		int photoX = this.contentX + this.contentWidth - CONTENT_INNER_PADDING - MAIN_MENU_PHOTO_DISPLAY_SIZE;
+		int photoY = this.contentY + this.contentHeight - CONTENT_INNER_PADDING - MAIN_MENU_PHOTO_DISPLAY_SIZE;
+		int creditWidth = this.font.width(credit);
+		int creditX = photoX - MAIN_MENU_CREDIT_GAP - creditWidth;
+		int creditY = photoY + (MAIN_MENU_PHOTO_DISPLAY_SIZE - this.font.lineHeight) / 2;
 
 		graphics.blit(
 				RenderPipelines.GUI_TEXTURED,
 				MAIN_MENU_PHOTO,
 				photoX,
-				textY,
+				photoY,
 				0.0f,
 				0.0f,
-				photoSize,
-				photoSize,
-				MAIN_MENU_PHOTO_SIZE,
-				MAIN_MENU_PHOTO_SIZE,
-				MAIN_MENU_PHOTO_SIZE,
-				MAIN_MENU_PHOTO_SIZE,
+				MAIN_MENU_PHOTO_DISPLAY_SIZE,
+				MAIN_MENU_PHOTO_DISPLAY_SIZE,
+				MAIN_MENU_PHOTO_TEXTURE_SIZE,
+				MAIN_MENU_PHOTO_TEXTURE_SIZE,
+				MAIN_MENU_PHOTO_TEXTURE_SIZE,
+				MAIN_MENU_PHOTO_TEXTURE_SIZE,
 				IMAGE_COLOR
 		);
+
+		int photoFrameX = photoX - MAIN_MENU_PHOTO_FRAME_PADDING;
+		int photoFrameY = photoY - MAIN_MENU_PHOTO_FRAME_PADDING;
+		int photoFrameSize = MAIN_MENU_PHOTO_DISPLAY_SIZE + MAIN_MENU_PHOTO_FRAME_PADDING * 2;
+		graphics.renderOutline(photoFrameX, photoFrameY, photoFrameSize, photoFrameSize, lineColor);
+
+		graphics.drawString(this.font, credit, creditX, creditY, -1, true);
+
+		int groupLeft = creditX - MAIN_MENU_CREDIT_GROUP_PADDING;
+		int groupTop = Math.min(creditY, photoFrameY) - MAIN_MENU_CREDIT_GROUP_PADDING;
+		int groupWidth = photoFrameX + photoFrameSize - groupLeft + MAIN_MENU_CREDIT_GROUP_PADDING;
+		int groupHeight = Math.max(creditY + this.font.lineHeight, photoFrameY + photoFrameSize)
+				- groupTop
+				+ MAIN_MENU_CREDIT_GROUP_PADDING;
+		graphics.renderOutline(groupLeft, groupTop, groupWidth, groupHeight, lineColor);
 	}
 
 	private void renderTextContent(GuiGraphics graphics, Component text) {
@@ -322,17 +440,72 @@ public class RedstoneMasterScreen extends Screen {
 				text,
 				this.contentX + CONTENT_INNER_PADDING,
 				this.contentY + CONTENT_INNER_PADDING,
-				this.contentWidth - CONTENT_INNER_PADDING * 2
+				this.contentWidth - CONTENT_INNER_PADDING * 2,
+				Integer.MAX_VALUE
 		);
 	}
 
 	private int renderTextContentAt(GuiGraphics graphics, Component text, int textX, int textY, int textWidth) {
-		List<FormattedCharSequence> lines = this.font.split(text, textWidth);
-		for (FormattedCharSequence line : lines) {
-			graphics.drawString(this.font, line, textX, textY, TEXT_COLOR, true);
+		return this.renderTextContentAt(graphics, text, textX, textY, textWidth, Integer.MAX_VALUE);
+	}
+
+	private int renderTextContentAt(
+			GuiGraphics graphics,
+			Component text,
+			int textX,
+			int textY,
+			int textWidth,
+			int maxTextBottom
+	) {
+		return this.renderStyledTextBlock(graphics, text, textX, textY, textWidth, maxTextBottom);
+	}
+
+	private int renderStyledTextBlock(
+			GuiGraphics graphics,
+			Component text,
+			int textX,
+			int textY,
+			int textWidth,
+			int maxTextBottom
+	) {
+		for (FormattedCharSequence line : this.font.split(text, textWidth)) {
+			if (textY + this.font.lineHeight > maxTextBottom) {
+				break;
+			}
+			graphics.drawString(this.font, line, textX, textY, -1, true);
 			textY += this.font.lineHeight;
 		}
 		return textY;
+	}
+
+	private int renderScaledTextBlock(
+			GuiGraphics graphics,
+			Component text,
+			int textX,
+			int textY,
+			int textWidth,
+			float scale,
+			int maxTextBottom
+	) {
+		int scaledLineHeight = (int) Math.ceil(this.font.lineHeight * scale);
+		int scaledWidth = Math.max(1, (int) (textWidth / scale));
+		List<FormattedCharSequence> lines = this.font.split(text, scaledWidth);
+		int blockHeight = scaledLineHeight * lines.size();
+		if (textY + blockHeight > maxTextBottom) {
+			return textY;
+		}
+
+		var pose = graphics.pose();
+		pose.pushMatrix();
+		pose.translate(textX, textY);
+		pose.scale(scale, scale);
+		int localY = 0;
+		for (FormattedCharSequence line : lines) {
+			graphics.drawString(this.font, line, 0, localY, -1, true);
+			localY += this.font.lineHeight;
+		}
+		pose.popMatrix();
+		return textY + blockHeight;
 	}
 
 	@Override

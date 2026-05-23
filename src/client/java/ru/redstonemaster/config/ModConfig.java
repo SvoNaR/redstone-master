@@ -24,9 +24,12 @@ public class ModConfig {
 	public boolean languageInitialized = false;
 	public String defaultModLanguage = "ru_ru";
 	public boolean closeOnRepeatKey = true;
+	public boolean tutorialCollapseOtherSections = false;
 	public boolean rememberSession = true;
 	public String lastTab = "MAIN_MENU";
 	public int settingsScrollOffset = 0;
+	public int tutorialScrollOffset = 0;
+	public String expandedTutorialSections = "";
 
 	public static ModConfig get() {
 		if (instance == null) {
@@ -74,7 +77,7 @@ public class ModConfig {
 	}
 
 	public static Path getConfigPath() {
-		return FabricLoader.getInstance().getConfigDir().resolve("redstone_master.json");
+		return FabricLoader.getInstance().getConfigDir().resolve("redstone-master.json");
 	}
 
 	public String getEffectiveLanguageCode() {
@@ -155,6 +158,8 @@ public class ModConfig {
 			case MANUAL_LANGUAGE -> this.manualLanguage.equals(this.getDefaultModLanguage());
 			case REMEMBER_SESSION -> this.rememberSession == ModSettingDefaults.REMEMBER_SESSION;
 			case CLOSE_ON_REPEAT -> this.closeOnRepeatKey == ModSettingDefaults.CLOSE_ON_REPEAT_KEY;
+			case TUTORIAL_COLLAPSE_OTHERS ->
+					this.tutorialCollapseOtherSections == ModSettingDefaults.TUTORIAL_COLLAPSE_OTHER_SECTIONS;
 		};
 	}
 
