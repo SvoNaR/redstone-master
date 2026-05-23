@@ -24,6 +24,8 @@ public class RedstoneMasterClient implements ClientModInitializer {
 	);
 
 	public static KeyMapping openGuiKey;
+	public static KeyMapping navigateBackKey;
+	public static KeyMapping navigateForwardKey;
 
 	@Override
 	public void onInitializeClient() {
@@ -36,8 +38,30 @@ public class RedstoneMasterClient implements ClientModInitializer {
 				KEY_CATEGORY
 		));
 
-		// В мире без открытого экрана — стандартный consumeClick().
+		navigateBackKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+				"key.redstone-master.open_gui.navigation_back",
+				InputConstants.Type.MOUSE,
+				GLFW.GLFW_MOUSE_BUTTON_4,
+				KEY_CATEGORY
+		));
+
+		navigateForwardKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+				"key.redstone-master.open_gui.navigation_forward",
+				InputConstants.Type.MOUSE,
+				GLFW.GLFW_MOUSE_BUTTON_5,
+				KEY_CATEGORY
+		));
+
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
+			if (client.screen instanceof RedstoneMasterScreen modScreen) {
+				while (navigateBackKey.consumeClick()) {
+					modScreen.navigateBack();
+				}
+				while (navigateForwardKey.consumeClick()) {
+					modScreen.navigateForward();
+				}
+				return;
+			}
 			if (client.screen != null) {
 				return;
 			}
@@ -51,6 +75,14 @@ public class RedstoneMasterClient implements ClientModInitializer {
 			ScreenKeyboardEvents.beforeKeyPress(screen).register((activeScreen, event) -> {
 				if (openGuiKey.matches(event)) {
 					handleOpenKey(client);
+					return;
+				}
+				if (activeScreen instanceof RedstoneMasterScreen modScreen) {
+					if (navigateBackKey.matches(event)) {
+						modScreen.navigateBack();
+					} else if (navigateForwardKey.matches(event)) {
+						modScreen.navigateForward();
+					}
 				}
 			});
 		});

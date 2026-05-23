@@ -1,7 +1,9 @@
 {
 	"key.category.redstone-master": "Redstone Master",
 	"key.category.redstone-master.main": "Redstone Master",
-	"key.redstone-master.open_gui": "Open Redstone Master",
+	"key.redstone-master.open_gui": "\u200BOpen Redstone Master",
+	"key.redstone-master.open_gui.navigation_back": "Navigation back",
+	"key.redstone-master.open_gui.navigation_forward": "Navigation forward",
 	"gui.redstone-master.title": "Redstone Master",
 	"gui.redstone-master.tab.main_menu": "Main Menu",
 	"gui.redstone-master.tab.tutorial": "Tutorial",

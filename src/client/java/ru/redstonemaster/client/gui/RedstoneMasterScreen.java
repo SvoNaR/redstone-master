@@ -1,6 +1,8 @@
 package ru.redstonemaster.client.gui;
 
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.GuiGraphics;
+import ru.redstonemaster.RedstoneMasterClient;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
@@ -58,6 +60,9 @@ public class RedstoneMasterScreen extends Screen {
 	@Nullable
 	private final Screen previousScreen;
 	private boolean sessionRestored;
+	private boolean navigationHistoryInitialized;
+	private boolean applyingNavigationHistory;
+	private final RedstoneMasterNavigationHistory navigationHistory = new RedstoneMasterNavigationHistory();
 
 	private int panelX;
 	private int panelY;
@@ -86,6 +91,10 @@ public class RedstoneMasterScreen extends Screen {
 			this.sessionRestored = true;
 		}
 		this.rebuildAllWidgets();
+		if (!this.navigationHistoryInitialized) {
+			this.navigationHistory.reset(this.captureNavigationSnapshot());
+			this.navigationHistoryInitialized = true;
+		}
 	}
 
 	@Override
@@ -214,10 +223,69 @@ public class RedstoneMasterScreen extends Screen {
 		}
 		if (this.currentTab == RedstoneMasterTab.TUTORIAL && tab != RedstoneMasterTab.TUTORIAL) {
 			this.persistTutorialScroll();
-			this.tutorialPanel.leaveTab();
 		}
 		this.currentTab = tab;
 		this.rebuildNavigation();
+		this.onNavigationPointReached();
+	}
+
+	void onNavigationPointReached() {
+		if (!this.applyingNavigationHistory) {
+			this.navigationHistory.push(this.captureNavigationSnapshot());
+		}
+	}
+
+	public void navigateBack() {
+		RedstoneMasterNavigationSnapshot snapshot = this.navigationHistory.goBack();
+		if (snapshot != null) {
+			this.applyNavigationSnapshot(snapshot);
+			return;
+		}
+		if (this.previousScreen != null) {
+			this.onClose();
+		}
+	}
+
+	public void navigateForward() {
+		RedstoneMasterNavigationSnapshot snapshot = this.navigationHistory.goForward();
+		if (snapshot != null) {
+			this.applyNavigationSnapshot(snapshot);
+		}
+	}
+
+	private RedstoneMasterNavigationSnapshot captureNavigationSnapshot() {
+		return new RedstoneMasterNavigationSnapshot(
+				this.currentTab,
+				this.tutorialPanel.getStudyTargetForNavigation(),
+				this.tutorialPanel.getScrollOffset(),
+				this.tutorialPanel.getSavedListScrollOffset(),
+				this.settingsPanel.getScrollOffset(),
+				this.tutorialPanel.getExpandedSectionsCsv()
+		);
+	}
+
+	private void applyNavigationSnapshot(RedstoneMasterNavigationSnapshot snapshot) {
+		this.applyingNavigationHistory = true;
+		try {
+			if (this.currentTab == RedstoneMasterTab.SETTINGS && snapshot.tab() != RedstoneMasterTab.SETTINGS) {
+				this.persistSettingsScroll();
+			}
+			if (this.currentTab == RedstoneMasterTab.TUTORIAL && snapshot.tab() != RedstoneMasterTab.TUTORIAL) {
+				this.persistTutorialScroll();
+			}
+
+			this.currentTab = snapshot.tab();
+			this.settingsPanel.setScrollOffset(snapshot.settingsScrollOffset());
+			this.tutorialPanel.restoreExpandedSections(snapshot.expandedTutorialSections());
+			this.tutorialPanel.restoreNavigationState(
+					snapshot.studyTarget(),
+					snapshot.tutorialScrollOffset(),
+					snapshot.tutorialSavedListScrollOffset()
+			);
+			this.rebuildNavigation();
+		} finally {
+			this.applyingNavigationHistory = false;
+		}
 	}
 
 	private void persistTutorialScroll() {
@@ -238,6 +306,19 @@ public class RedstoneMasterScreen extends Screen {
 	public void resize(int width, int height) {
 		super.resize(width, height);
 		this.rebuildAllWidgets();
+	}
+
+	@Override
+	public boolean mouseClicked(MouseButtonEvent event, boolean doubled) {
+		if (RedstoneMasterClient.navigateBackKey.matchesMouse(event)) {
+			this.navigateBack();
+			return true;
+		}
+		if (RedstoneMasterClient.navigateForwardKey.matchesMouse(event)) {
+			this.navigateForward();
+			return true;
+		}
+		return super.mouseClicked(event, doubled);
 	}
 
 	@Override

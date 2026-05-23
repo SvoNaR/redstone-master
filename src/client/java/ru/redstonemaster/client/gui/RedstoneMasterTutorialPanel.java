@@ -280,16 +280,30 @@ final class RedstoneMasterTutorialPanel {
 		this.studyTarget = target;
 		this.scrollOffset = 0;
 		this.screen.rebuildTutorialWidgets();
+		this.screen.onNavigationPointReached();
 	}
 
 	private void closeStudy() {
-		this.studyTarget = null;
-		if (ModConfig.get().rememberSession) {
-			this.scrollOffset = this.savedListScrollOffset;
-		} else {
-			this.scrollOffset = 0;
-		}
-		this.screen.rebuildTutorialWidgets();
+		this.screen.navigateBack();
+	}
+
+	void restoreNavigationState(
+			@org.jetbrains.annotations.Nullable TutorialStudyTarget target,
+			int scrollOffset,
+			int savedListScrollOffset
+	) {
+		this.studyTarget = target;
+		this.scrollOffset = Math.max(0, scrollOffset);
+		this.savedListScrollOffset = Math.max(0, savedListScrollOffset);
+	}
+
+	int getSavedListScrollOffset() {
+		return this.savedListScrollOffset;
+	}
+
+	@org.jetbrains.annotations.Nullable
+	TutorialStudyTarget getStudyTargetForNavigation() {
+		return this.studyTarget;
 	}
 
 	private int getStudyButtonWidth() {
