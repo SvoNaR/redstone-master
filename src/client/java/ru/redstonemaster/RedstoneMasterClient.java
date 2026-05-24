@@ -27,6 +27,9 @@ public class RedstoneMasterClient implements ClientModInitializer {
 	public static KeyMapping navigateBackKey;
 	public static KeyMapping navigateForwardKey;
 
+	/** Блокирует повторное открытие после закрытия через beforeKeyPress (в мире consumeClick ещё не съеден). */
+	private static boolean suppressNextOpenKey;
+
 	@Override
 	public void onInitializeClient() {
 		ModConfig.load();
@@ -54,6 +57,9 @@ public class RedstoneMasterClient implements ClientModInitializer {
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			if (client.screen instanceof RedstoneMasterScreen modScreen) {
+				while (openGuiKey.consumeClick()) {
+					handleOpenKey(client);
+				}
 				while (navigateBackKey.consumeClick()) {
 					modScreen.navigateBack();
 				}
@@ -74,7 +80,16 @@ public class RedstoneMasterClient implements ClientModInitializer {
 		ScreenEvents.AFTER_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
 			ScreenKeyboardEvents.beforeKeyPress(screen).register((activeScreen, event) -> {
 				if (openGuiKey.matches(event)) {
-					handleOpenKey(client);
+					if (activeScreen instanceof RedstoneMasterScreen modScreen) {
+						if (ModConfig.get().closeOnRepeatKey) {
+							suppressNextOpenKey = true;
+							modScreen.onClose();
+						}
+						while (openGuiKey.consumeClick()) {
+						}
+					} else {
+						handleOpenKey(client);
+					}
 					return;
 				}
 				if (activeScreen instanceof RedstoneMasterScreen modScreen) {
@@ -92,6 +107,15 @@ public class RedstoneMasterClient implements ClientModInitializer {
 		if (client.screen instanceof RedstoneMasterScreen modScreen) {
 			if (ModConfig.get().closeOnRepeatKey) {
 				modScreen.onClose();
+			}
+			while (openGuiKey.consumeClick()) {
+			}
+			return;
+		}
+
+		if (suppressNextOpenKey) {
+			suppressNextOpenKey = false;
+			while (openGuiKey.consumeClick()) {
 			}
 			return;
 		}

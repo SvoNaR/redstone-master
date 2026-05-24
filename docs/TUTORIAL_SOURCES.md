@@ -1,6 +1,6 @@
 # Источники учебного контента (вкладка «Обучение»)
 
-Тексты уроков в `assets/redstone-master/tutorial/ru_ru.json` и `en_us.json` подготовлены для мода **Redstone Master** на основе открытых материалов Minecraft Wiki и обобщены автором ВКР. Подробные версии (≈10× объём базовых описаний) хранятся в `tools/tutorial_bodies_ru.py` и `tools/tutorial_bodies_en.py`; пересборка JSON: `python tools/gen_tutorial_json.py`. Ниже — основные страницы, на которые опирается структура разделов.
+Тексты уроков в `assets/redstone-master/tutorial/ru_ru.json` и `en_us.json` подготовлены для мода **Redstone Master** на основе открытых материалов Minecraft Wiki и обобщены автором мода. Подробные версии (≈10× объём базовых описаний) хранятся в `tools/tutorial_bodies_ru.py` и `tools/tutorial_bodies_en.py`; пересборка JSON: `python tools/gen_tutorial_json.py`. Ниже — основные страницы, на которые опирается структура разделов.
 
 ## Главный обзор
 

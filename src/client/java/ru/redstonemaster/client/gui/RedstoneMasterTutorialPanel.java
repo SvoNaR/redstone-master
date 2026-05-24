@@ -274,6 +274,9 @@ final class RedstoneMasterTutorialPanel {
 	}
 
 	private void openStudy(TutorialStudyTarget target) {
+		if (this.studyTarget == null) {
+			this.screen.onNavigationPointReached();
+		}
 		if (ModConfig.get().rememberSession) {
 			this.savedListScrollOffset = this.scrollOffset;
 		}
@@ -304,6 +307,16 @@ final class RedstoneMasterTutorialPanel {
 	@org.jetbrains.annotations.Nullable
 	TutorialStudyTarget getStudyTargetForNavigation() {
 		return this.studyTarget;
+	}
+
+	boolean isValidStudyTarget(TutorialStudyTarget target) {
+		TutorialCatalog.ensureLoaded();
+		return switch (target) {
+			case TutorialStudyTarget.SectionTarget section ->
+					TutorialCatalog.findSection(section.sectionId()) != null;
+			case TutorialStudyTarget.LessonTarget lesson ->
+					TutorialCatalog.findLesson(lesson.sectionId(), lesson.lessonId()) != null;
+		};
 	}
 
 	private int getStudyButtonWidth() {

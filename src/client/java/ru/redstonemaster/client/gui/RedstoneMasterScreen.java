@@ -14,8 +14,11 @@ import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
+import ru.redstonemaster.client.gui.tutorial.TutorialSessionPersistence;
+import ru.redstonemaster.client.gui.tutorial.TutorialStudyTarget;
 import ru.redstonemaster.config.ModConfig;
 import ru.redstonemaster.config.ModContentLanguage;
+import ru.redstonemaster.config.ModSessionState;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -39,6 +42,11 @@ public class RedstoneMasterScreen extends Screen {
 	private static final float TITLE_SCALE = 1.5f;
 	private static final Identifier MAIN_MENU_PHOTO = Identifier.fromNamespaceAndPath(
 			"redstone-master", "textures/gui/photo1_main_menu.png");
+	private static final Identifier PROFILE_AVATAR = Identifier.fromNamespaceAndPath(
+			"redstone-master", "textures/gui/profile_avatar.png");
+	private static final int PROFILE_AVATAR_TEXTURE_SIZE = 8;
+	private static final int PROFILE_AVATAR_DISPLAY_SIZE = 8;
+	private static final int PROFILE_AVATAR_GAP = 2;
 	private static final int MAIN_MENU_PHOTO_TEXTURE_SIZE = 1024;
 	private static final int MAIN_MENU_PHOTO_DISPLAY_SIZE = 40;
 	private static final int MAIN_MENU_PHOTO_FRAME_PADDING = 2;
@@ -75,6 +83,8 @@ public class RedstoneMasterScreen extends Screen {
 	private int contentY;
 	private int contentWidth;
 	private int contentHeight;
+	@Nullable
+	private Button profileTabButton;
 
 	public RedstoneMasterScreen(@Nullable Screen previousScreen) {
 		super(ModContentLanguage.translatable("gui.redstone-master.title"));
@@ -106,31 +116,58 @@ public class RedstoneMasterScreen extends Screen {
 	}
 
 	private void restoreSessionState() {
-		ModConfig config = ModConfig.get();
-		if (!config.rememberSession) {
-			this.currentTab = RedstoneMasterTab.MAIN_MENU;
-			this.settingsPanel.setScrollOffset(0);
-			this.tutorialPanel.setScrollOffset(0);
-			this.tutorialPanel.restoreExpandedSections("");
+		if (!ModConfig.get().rememberSession || !ModSessionState.get().hasSaved()) {
+			this.applyDefaultSessionUi();
 			return;
 		}
-		RedstoneMasterTab savedTab = RedstoneMasterTab.fromName(config.lastTab);
+		ModSessionState session = ModSessionState.get();
+		RedstoneMasterTab savedTab = RedstoneMasterTab.fromName(session.getLastTab());
 		this.currentTab = savedTab != null ? savedTab : RedstoneMasterTab.MAIN_MENU;
-		this.settingsPanel.setScrollOffset(config.settingsScrollOffset);
-		this.tutorialPanel.setScrollOffset(config.tutorialScrollOffset);
-		this.tutorialPanel.restoreExpandedSections(config.expandedTutorialSections);
+		this.settingsPanel.setScrollOffset(session.getSettingsScrollOffset());
+		this.tutorialPanel.restoreExpandedSections(session.getExpandedTutorialSections());
+		TutorialStudyTarget studyTarget = TutorialSessionPersistence.fromStorageKey(session.getTutorialStudyTarget());
+		if (studyTarget != null && !this.tutorialPanel.isValidStudyTarget(studyTarget)) {
+			studyTarget = null;
+		}
+		if (studyTarget != null) {
+			this.tutorialPanel.restoreNavigationState(
+					studyTarget,
+					session.getTutorialStudyScrollOffset(),
+					session.getTutorialScrollOffset()
+			);
+		} else {
+			this.tutorialPanel.restoreNavigationState(null, session.getTutorialScrollOffset(), 0);
+		}
 	}
 
 	private void persistSessionState() {
-		ModConfig config = ModConfig.get();
-		if (!config.rememberSession) {
+		if (!ModConfig.get().rememberSession) {
+			ModSessionState.get().clear();
 			return;
 		}
-		config.lastTab = this.currentTab.name();
-		config.settingsScrollOffset = this.settingsPanel.getScrollOffset();
-		config.tutorialScrollOffset = this.tutorialPanel.getListScrollOffsetForPersistence();
-		config.expandedTutorialSections = this.tutorialPanel.getExpandedSectionsCsv();
-		config.save();
+		TutorialStudyTarget studyTarget = this.tutorialPanel.getStudyTargetForNavigation();
+		ModSessionState.get().save(
+				this.currentTab.name(),
+				this.settingsPanel.getScrollOffset(),
+				this.tutorialPanel.getListScrollOffsetForPersistence(),
+				this.tutorialPanel.getExpandedSectionsCsv(),
+				TutorialSessionPersistence.toStorageKey(studyTarget),
+				studyTarget != null ? this.tutorialPanel.getScrollOffset() : 0
+		);
+	}
+
+	/** Сброс прокрутки и обучения в памяти (вкладка не меняется). */
+	void clearStoredSessionContent() {
+		this.settingsPanel.setScrollOffset(0);
+		this.tutorialPanel.restoreExpandedSections("");
+		this.tutorialPanel.restoreNavigationState(null, 0, 0);
+		this.navigationHistory.reset(this.captureNavigationSnapshot());
+	}
+
+	/** При открытии мода без сохранения сессии — главная вкладка и сброс позиций. */
+	void applyDefaultSessionUi() {
+		this.currentTab = RedstoneMasterTab.MAIN_MENU;
+		this.clearStoredSessionContent();
 	}
 
 	void rebuildAllWidgets() {
@@ -195,11 +232,12 @@ public class RedstoneMasterScreen extends Screen {
 				.bounds(innerX + navButtonWidth * 2, this.navY, navButtonWidth, NAV_BAR_HEIGHT)
 				.build());
 
-		this.addRenderableWidget(Button.builder(
+		this.profileTabButton = Button.builder(
 						ModContentLanguage.translatable("gui.redstone-master.tab.profile"),
 						button -> this.selectTab(RedstoneMasterTab.PROFILE))
 				.bounds(innerX + navButtonWidth * 3, this.navY, navButtonWidth, NAV_BAR_HEIGHT)
-				.build());
+				.build();
+		this.addRenderableWidget(this.profileTabButton);
 
 		int closeX = innerX + navButtonWidth * 4 + CLOSE_BUTTON_GAP;
 		this.addRenderableWidget(Button.builder(
@@ -289,17 +327,11 @@ public class RedstoneMasterScreen extends Screen {
 	}
 
 	private void persistTutorialScroll() {
-		if (ModConfig.get().rememberSession) {
-			ModConfig config = ModConfig.get();
-			config.tutorialScrollOffset = this.tutorialPanel.getListScrollOffsetForPersistence();
-			config.expandedTutorialSections = this.tutorialPanel.getExpandedSectionsCsv();
-		}
+		this.persistSessionState();
 	}
 
 	private void persistSettingsScroll() {
-		if (ModConfig.get().rememberSession) {
-			ModConfig.get().settingsScrollOffset = this.settingsPanel.getScrollOffset();
-		}
+		this.persistSessionState();
 	}
 
 	@Override
@@ -336,19 +368,41 @@ public class RedstoneMasterScreen extends Screen {
 	public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
 		if (this.shouldShowTitleMenuPanorama()) {
 			this.renderPanorama(graphics, delta);
-			return;
 		}
-		// В мире — прозрачные края, виден игровой мир.
+		this.renderMenuBackground(graphics, this.panelX, this.panelY, this.panelWidth, this.panelHeight);
 	}
 
 	private boolean shouldShowTitleMenuPanorama() {
 		return this.previousScreen instanceof TitleScreen;
 	}
 
+	private void renderProfileTabAvatar(GuiGraphics graphics) {
+		if (this.profileTabButton == null || !this.profileTabButton.visible) {
+			return;
+		}
+		String label = ModContentLanguage.get("gui.redstone-master.tab.profile");
+		int labelWidth = this.font.width(label);
+		int avatarX = this.profileTabButton.getX() + (this.profileTabButton.getWidth() + labelWidth) / 2 + PROFILE_AVATAR_GAP;
+		int avatarY = this.profileTabButton.getY() + (this.profileTabButton.getHeight() - PROFILE_AVATAR_DISPLAY_SIZE) / 2;
+		graphics.blit(
+				RenderPipelines.GUI_TEXTURED,
+				PROFILE_AVATAR,
+				avatarX,
+				avatarY,
+				0.0f,
+				0.0f,
+				PROFILE_AVATAR_DISPLAY_SIZE,
+				PROFILE_AVATAR_DISPLAY_SIZE,
+				PROFILE_AVATAR_TEXTURE_SIZE,
+				PROFILE_AVATAR_TEXTURE_SIZE,
+				IMAGE_COLOR
+		);
+	}
+
 	@Override
 	public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-		this.renderMenuBackground(graphics, this.panelX, this.panelY, this.panelWidth, this.panelHeight);
 		super.render(graphics, mouseX, mouseY, delta);
+		this.renderProfileTabAvatar(graphics);
 		this.renderDecorations(graphics);
 		this.renderContent(graphics);
 		if (this.currentTab == RedstoneMasterTab.SETTINGS) {

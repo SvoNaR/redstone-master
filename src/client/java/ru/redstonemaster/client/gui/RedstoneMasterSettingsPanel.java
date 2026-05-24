@@ -30,7 +30,7 @@ final class RedstoneMasterSettingsPanel {
 	private static final int RESET_BUTTON_MIN_WIDTH = 44;
 	private static final int RESET_BUTTON_PADDING = 8;
 	private static final int RESET_BUTTON_GAP = 2;
-	private static final int FOOTER_GAP = 8;
+	private static final int RESET_ALL_GAP = 6;
 	private static final int TEXT_COLOR = 0xFFFFFFFF;
 	private static final int SECTION_COLOR = 0xFFE0E0E0;
 	private static final int DISCLAIMER_COLOR = 0xFFBBBBBB;
@@ -102,15 +102,11 @@ final class RedstoneMasterSettingsPanel {
 			y += rowHeight + ROW_GAP;
 		}
 
-		y += FOOTER_GAP;
-		int resetAllY = y;
-		this.layoutRows.add(LayoutRow.resetAll(resetAllY, ROW_HEIGHT));
-		int resetAllButtonY = this.getSettingButtonY(resetAllY, ROW_HEIGHT);
 		ModConfig config = ModConfig.get();
 		this.resetAllButton = Button.builder(
 						ModContentLanguage.translatable("gui.redstone-master.settings.reset_all"),
 						button -> this.openResetAllConfirm())
-				.bounds(innerX, resetAllButtonY, innerWidth, ROW_HEIGHT)
+				.bounds(innerX, this.getResetAllButtonY(), innerWidth, ROW_HEIGHT)
 				.build();
 		this.resetAllButton.active = !config.areAllModSettingsAtDefault();
 		this.screen.addContentWidget(this.resetAllButton);
@@ -239,7 +235,12 @@ final class RedstoneMasterSettingsPanel {
 							this.getToggleLabel(config.rememberSession),
 							button -> {
 								config.rememberSession = !config.rememberSession;
-								config.save();
+								if (config.rememberSession) {
+									config.save();
+								} else {
+									ru.redstonemaster.config.ModSessionState.get().clear();
+									this.screen.clearStoredSessionContent();
+								}
 								this.screen.rebuildSettingsWidgets();
 							})
 					.bounds(x, y, width, ROW_HEIGHT)
@@ -334,13 +335,13 @@ final class RedstoneMasterSettingsPanel {
 				+ Math.min(VALUE_BUTTON_WIDTH, Math.max(48, innerListWidth - resetButtonWidth - RESET_BUTTON_GAP - 80));
 		int labelWidth = innerListWidth - controlsWidth - 12;
 		int listTop = this.getListTop();
-		int contentBottom = this.getContentBottom();
+		int scrollBottom = this.getScrollableContentBottom();
 
 		graphics.enableScissor(
 				this.screen.getContentX() + 1,
 				listTop,
 				this.screen.getContentX() + this.screen.getContentWidth() - 1,
-				contentBottom
+				scrollBottom
 		);
 
 		int disclaimerWidth = this.screen.getContentWidth() - RedstoneMasterScreen.CONTENT_INNER_PADDING * 2;
@@ -352,14 +353,14 @@ final class RedstoneMasterSettingsPanel {
 						.split(ModContentLanguage.translatable(DISCLAIMER_KEY), disclaimerWidth);
 				int lineY = drawY;
 				for (var line : lines) {
-					if (lineY + this.screen.getFont().lineHeight >= listTop && lineY <= contentBottom) {
+					if (lineY + this.screen.getFont().lineHeight >= listTop && lineY <= scrollBottom) {
 						graphics.drawString(this.screen.getFont(), line, labelX, lineY, DISCLAIMER_COLOR, true);
 					}
 					lineY += this.screen.getFont().lineHeight;
 				}
 			} else if (row.isSection) {
 				int drawY = row.y - this.scrollOffset;
-				if (drawY + this.screen.getFont().lineHeight >= listTop && drawY <= contentBottom) {
+				if (drawY + this.screen.getFont().lineHeight >= listTop && drawY <= scrollBottom) {
 					graphics.drawString(
 							this.screen.getFont(),
 							ModContentLanguage.translatable(row.sectionKey),
@@ -376,7 +377,7 @@ final class RedstoneMasterSettingsPanel {
 						.split(Component.literal(bulletName), labelWidth);
 				int lineY = this.getSettingLabelY(drawY, row.rowHeight, lines.size());
 				for (var line : lines) {
-					if (lineY + this.screen.getFont().lineHeight >= listTop && lineY <= contentBottom) {
+					if (lineY + this.screen.getFont().lineHeight >= listTop && lineY <= scrollBottom) {
 						graphics.drawString(this.screen.getFont(), line, labelX, lineY, TEXT_COLOR, true);
 					}
 					lineY += this.screen.getFont().lineHeight;
@@ -399,24 +400,15 @@ final class RedstoneMasterSettingsPanel {
 
 	private void applyScrollToControls() {
 		int listTop = this.getListTop();
-		int contentBottom = this.getContentBottom();
+		int scrollBottom = this.getScrollableContentBottom();
 		int settingIndex = 0;
 
 		for (LayoutRow row : this.layoutRows) {
-			if (row.isResetAll) {
-				if (this.resetAllButton != null) {
-					int displayY = this.getSettingButtonY(row.y - this.scrollOffset, row.rowHeight);
-					this.resetAllButton.setY(displayY);
-					this.resetAllButton.visible = displayY >= listTop - 1
-							&& displayY + ROW_HEIGHT <= contentBottom + 1;
-				}
-				continue;
-			}
 			if (row.setting == null) {
 				continue;
 			}
 			int displayY = this.getSettingButtonY(row.y - this.scrollOffset, row.rowHeight);
-			boolean visible = displayY >= listTop - 1 && displayY + ROW_HEIGHT <= contentBottom + 1;
+			boolean visible = displayY >= listTop - 1 && displayY + ROW_HEIGHT <= scrollBottom + 1;
 			if (settingIndex < this.valueButtons.size()) {
 				Button valueButton = this.valueButtons.get(settingIndex);
 				valueButton.setY(displayY);
@@ -455,8 +447,16 @@ final class RedstoneMasterSettingsPanel {
 		return this.screen.getContentY() + this.screen.getContentHeight() - RedstoneMasterScreen.CONTENT_INNER_PADDING;
 	}
 
+	private int getResetAllButtonY() {
+		return this.getContentBottom() - ROW_HEIGHT;
+	}
+
+	private int getScrollableContentBottom() {
+		return this.getResetAllButtonY() - RESET_ALL_GAP;
+	}
+
 	private int getListViewHeight() {
-		return this.getContentBottom() - this.getListTop();
+		return this.getScrollableContentBottom() - this.getListTop();
 	}
 
 	private int getListContentHeight() {
@@ -494,7 +494,6 @@ final class RedstoneMasterSettingsPanel {
 	private static final class LayoutRow {
 		private final boolean isSection;
 		private final boolean isDisclaimer;
-		private final boolean isResetAll;
 		private final String sectionKey;
 		private final ModSetting setting;
 		private final int y;
@@ -503,7 +502,6 @@ final class RedstoneMasterSettingsPanel {
 		private LayoutRow(
 				boolean isSection,
 				boolean isDisclaimer,
-				boolean isResetAll,
 				String sectionKey,
 				ModSetting setting,
 				int y,
@@ -511,7 +509,6 @@ final class RedstoneMasterSettingsPanel {
 		) {
 			this.isSection = isSection;
 			this.isDisclaimer = isDisclaimer;
-			this.isResetAll = isResetAll;
 			this.sectionKey = sectionKey;
 			this.setting = setting;
 			this.y = y;
@@ -519,19 +516,15 @@ final class RedstoneMasterSettingsPanel {
 		}
 
 		static LayoutRow section(String sectionKey, int y) {
-			return new LayoutRow(true, false, false, sectionKey, null, y, 0);
+			return new LayoutRow(true, false, sectionKey, null, y, 0);
 		}
 
 		static LayoutRow disclaimer(int y, int rowHeight) {
-			return new LayoutRow(false, true, false, null, null, y, rowHeight);
+			return new LayoutRow(false, true, null, null, y, rowHeight);
 		}
 
 		static LayoutRow setting(ModSetting setting, int y, int rowHeight) {
-			return new LayoutRow(false, false, false, null, setting, y, rowHeight);
-		}
-
-		static LayoutRow resetAll(int y, int rowHeight) {
-			return new LayoutRow(false, false, true, null, null, y, rowHeight);
+			return new LayoutRow(false, false, null, setting, y, rowHeight);
 		}
 	}
 }

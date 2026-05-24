@@ -26,10 +26,6 @@ public class ModConfig {
 	public boolean closeOnRepeatKey = true;
 	public boolean tutorialCollapseOtherSections = false;
 	public boolean rememberSession = true;
-	public String lastTab = "MAIN_MENU";
-	public int settingsScrollOffset = 0;
-	public int tutorialScrollOffset = 0;
-	public String expandedTutorialSections = "";
 
 	public static ModConfig get() {
 		if (instance == null) {
@@ -48,7 +44,6 @@ public class ModConfig {
 					instance = new ModConfig();
 				}
 				instance.clampPanelScale();
-				instance.clampSessionState();
 			} catch (IOException | com.google.gson.JsonSyntaxException e) {
 				instance = new ModConfig();
 			}
@@ -68,12 +63,6 @@ public class ModConfig {
 
 	private void clampPanelScale() {
 		this.panelScale = Math.clamp(this.panelScale, 0.6, 1.0);
-	}
-
-	private void clampSessionState() {
-		if (this.settingsScrollOffset < 0) {
-			this.settingsScrollOffset = 0;
-		}
 	}
 
 	public static Path getConfigPath() {
@@ -153,9 +142,9 @@ public class ModConfig {
 			case PANEL_SCALE -> Math.abs(this.panelScale - ModSettingDefaults.PANEL_SCALE) < 0.001;
 			case PAUSE_ON_OPEN -> this.pauseOnOpen == ModSettingDefaults.PAUSE_ON_OPEN;
 			case HIGH_CONTRAST -> this.highContrastBorders == ModSettingDefaults.HIGH_CONTRAST_BORDERS;
-			case AUTO_LANGUAGE -> this.autoLanguage == ModSettingDefaults.AUTO_LANGUAGE
-					&& this.manualLanguage.equals(this.getDefaultModLanguage());
-			case MANUAL_LANGUAGE -> this.manualLanguage.equals(this.getDefaultModLanguage());
+			case AUTO_LANGUAGE -> this.autoLanguage == ModSettingDefaults.AUTO_LANGUAGE;
+			case MANUAL_LANGUAGE -> this.autoLanguage
+					|| this.manualLanguage.equals(this.getDefaultModLanguage());
 			case REMEMBER_SESSION -> this.rememberSession == ModSettingDefaults.REMEMBER_SESSION;
 			case CLOSE_ON_REPEAT -> this.closeOnRepeatKey == ModSettingDefaults.CLOSE_ON_REPEAT_KEY;
 			case TUTORIAL_COLLAPSE_OTHERS ->
