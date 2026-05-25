@@ -1,4 +1,4 @@
-﻿# Redstone Master
+# Redstone Master
 
 Клиентский Fabric-мод для Minecraft **1.21.11** с обучающими материалами по редстоун-механикам.
 

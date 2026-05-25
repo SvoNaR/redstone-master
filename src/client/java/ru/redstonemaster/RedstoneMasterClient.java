@@ -10,7 +10,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
+import ru.redstonemaster.client.auth.ModWebAuthService;
 import ru.redstonemaster.client.gui.RedstoneMasterScreen;
+import ru.redstonemaster.client.profile.ModAvatarManager;
 import ru.redstonemaster.config.ModConfig;
 import ru.redstonemaster.config.ModContentLanguage;
 
@@ -33,6 +35,8 @@ public class RedstoneMasterClient implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		ModConfig.load();
+		ModAvatarManager.ensureGuestAvatar();
+		ModAvatarManager.loadProfileAvatar();
 
 		openGuiKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
 				"key.redstone-master.open_gui",
@@ -56,7 +60,11 @@ public class RedstoneMasterClient implements ClientModInitializer {
 		));
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
+			ModWebAuthService.get().tick(client);
 			if (client.screen instanceof RedstoneMasterScreen modScreen) {
+				if (ModWebAuthService.get().consumeProfileUiStale()) {
+					modScreen.rebuildAllWidgets();
+				}
 				while (openGuiKey.consumeClick()) {
 					handleOpenKey(client);
 				}
@@ -69,6 +77,7 @@ public class RedstoneMasterClient implements ClientModInitializer {
 				return;
 			}
 			if (client.screen != null) {
+				ModWebAuthService.get().tick(client);
 				return;
 			}
 			while (openGuiKey.consumeClick()) {

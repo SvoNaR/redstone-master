@@ -26,6 +26,11 @@ public class ModConfig {
 	public boolean closeOnRepeatKey = true;
 	public boolean tutorialCollapseOtherSections = false;
 	public boolean rememberSession = true;
+	public String webBaseUrl = "http://localhost:8080";
+	public int guestAvatarDefault = 0;
+	public boolean profileLoggedIn = false;
+	public String profileUsername = "";
+	public String profileAvatarUrl = "";
 
 	public static ModConfig get() {
 		if (instance == null) {

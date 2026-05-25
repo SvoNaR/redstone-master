@@ -14,6 +14,8 @@ import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
+import ru.redstonemaster.client.auth.ModWebAuthService;
+import ru.redstonemaster.client.profile.ModAvatarManager;
 import ru.redstonemaster.client.gui.tutorial.TutorialSessionPersistence;
 import ru.redstonemaster.client.gui.tutorial.TutorialStudyTarget;
 import ru.redstonemaster.config.ModConfig;
@@ -65,11 +67,14 @@ public class RedstoneMasterScreen extends Screen {
 	private RedstoneMasterTab currentTab = RedstoneMasterTab.MAIN_MENU;
 	private final RedstoneMasterSettingsPanel settingsPanel = new RedstoneMasterSettingsPanel(this);
 	private final RedstoneMasterTutorialPanel tutorialPanel = new RedstoneMasterTutorialPanel(this);
+	private final RedstoneMasterProfilePanel profilePanel = new RedstoneMasterProfilePanel(this);
 	@Nullable
 	private final Screen previousScreen;
 	private boolean sessionRestored;
 	private boolean navigationHistoryInitialized;
 	private boolean applyingNavigationHistory;
+	private boolean openProfileOnInit;
+	private boolean showLoginSuccessOnInit;
 	private final RedstoneMasterNavigationHistory navigationHistory = new RedstoneMasterNavigationHistory();
 
 	private int panelX;
@@ -87,8 +92,14 @@ public class RedstoneMasterScreen extends Screen {
 	private Button profileTabButton;
 
 	public RedstoneMasterScreen(@Nullable Screen previousScreen) {
+		this(previousScreen, false, false);
+	}
+
+	public RedstoneMasterScreen(@Nullable Screen previousScreen, boolean openProfileTab, boolean showLoginSuccess) {
 		super(ModContentLanguage.translatable("gui.redstone-master.title"));
 		this.previousScreen = previousScreen;
+		this.openProfileOnInit = openProfileTab;
+		this.showLoginSuccessOnInit = showLoginSuccess;
 	}
 
 	@Override
@@ -99,6 +110,21 @@ public class RedstoneMasterScreen extends Screen {
 		if (!this.sessionRestored) {
 			this.restoreSessionState();
 			this.sessionRestored = true;
+		}
+		if (ModWebAuthService.get().consumeOpenProfileTab()) {
+			this.openProfileOnInit = true;
+			this.showLoginSuccessOnInit = ModWebAuthService.get().consumeLoginSuccess();
+		}
+		if (this.openProfileOnInit) {
+			this.currentTab = RedstoneMasterTab.PROFILE;
+			this.openProfileOnInit = false;
+		}
+		if (this.showLoginSuccessOnInit) {
+			this.profilePanel.setShowLoginSuccess(true);
+			this.showLoginSuccessOnInit = false;
+		}
+		if (this.currentTab == RedstoneMasterTab.PROFILE) {
+			this.profilePanel.onTabOpened();
 		}
 		this.rebuildAllWidgets();
 		if (!this.navigationHistoryInitialized) {
@@ -170,7 +196,7 @@ public class RedstoneMasterScreen extends Screen {
 		this.clearStoredSessionContent();
 	}
 
-	void rebuildAllWidgets() {
+	public void rebuildAllWidgets() {
 		this.updatePanelBounds();
 		this.rebuildNavigation();
 	}
@@ -207,6 +233,7 @@ public class RedstoneMasterScreen extends Screen {
 		this.clearWidgets();
 		this.settingsPanel.dispose();
 		this.tutorialPanel.dispose();
+		this.profilePanel.dispose();
 
 		int innerX = this.panelX + PANEL_PADDING;
 		int innerWidth = this.panelWidth - PANEL_PADDING * 2;
@@ -253,6 +280,16 @@ public class RedstoneMasterScreen extends Screen {
 		if (this.currentTab == RedstoneMasterTab.TUTORIAL) {
 			this.tutorialPanel.rebuildWidgets();
 		}
+		if (this.currentTab == RedstoneMasterTab.PROFILE) {
+			this.profilePanel.rebuildWidgets();
+		}
+	}
+
+	public void openProfileAfterAuth(boolean showLoginSuccess) {
+		this.currentTab = RedstoneMasterTab.PROFILE;
+		this.profilePanel.setShowLoginSuccess(showLoginSuccess);
+		this.profilePanel.onTabOpened();
+		this.rebuildNavigation();
 	}
 
 	private void selectTab(RedstoneMasterTab tab) {
@@ -263,6 +300,9 @@ public class RedstoneMasterScreen extends Screen {
 			this.persistTutorialScroll();
 		}
 		this.currentTab = tab;
+		if (this.currentTab == RedstoneMasterTab.PROFILE) {
+			this.profilePanel.onTabOpened();
+		}
 		this.rebuildNavigation();
 		this.onNavigationPointReached();
 	}
@@ -384,17 +424,22 @@ public class RedstoneMasterScreen extends Screen {
 		int labelWidth = this.font.width(label);
 		int avatarX = this.profileTabButton.getX() + (this.profileTabButton.getWidth() + labelWidth) / 2 + PROFILE_AVATAR_GAP;
 		int avatarY = this.profileTabButton.getY() + (this.profileTabButton.getHeight() - PROFILE_AVATAR_DISPLAY_SIZE) / 2;
+		Identifier avatarId = ModAvatarManager.getTabAvatarId();
+		int textureWidth = ModAvatarManager.getTabAvatarTextureWidth();
+		int textureHeight = ModAvatarManager.getTabAvatarTextureHeight();
 		graphics.blit(
 				RenderPipelines.GUI_TEXTURED,
-				PROFILE_AVATAR,
+				avatarId,
 				avatarX,
 				avatarY,
 				0.0f,
 				0.0f,
 				PROFILE_AVATAR_DISPLAY_SIZE,
 				PROFILE_AVATAR_DISPLAY_SIZE,
-				PROFILE_AVATAR_TEXTURE_SIZE,
-				PROFILE_AVATAR_TEXTURE_SIZE,
+				textureWidth,
+				textureHeight,
+				textureWidth,
+				textureHeight,
 				IMAGE_COLOR
 		);
 	}
@@ -410,6 +455,9 @@ public class RedstoneMasterScreen extends Screen {
 		}
 		if (this.currentTab == RedstoneMasterTab.TUTORIAL) {
 			this.tutorialPanel.render(graphics);
+		}
+		if (this.currentTab == RedstoneMasterTab.PROFILE) {
+			this.profilePanel.render(graphics);
 		}
 	}
 
@@ -464,7 +512,7 @@ public class RedstoneMasterScreen extends Screen {
 			case MAIN_MENU -> this.renderMainMenuContent(graphics);
 			case SETTINGS -> { /* подписи рисуются в settingsPanel.renderLabels */ }
 			case TUTORIAL -> { /* tutorialPanel.render */ }
-			default -> this.renderTextContent(graphics, this.currentTab.getContent());
+			case PROFILE -> { /* profilePanel.render */ }
 		}
 	}
 
@@ -580,8 +628,12 @@ public class RedstoneMasterScreen extends Screen {
 		);
 	}
 
-	private int renderTextContentAt(GuiGraphics graphics, Component text, int textX, int textY, int textWidth) {
+	int renderTextContentAt(GuiGraphics graphics, Component text, int textX, int textY, int textWidth) {
 		return this.renderTextContentAt(graphics, text, textX, textY, textWidth, Integer.MAX_VALUE);
+	}
+
+	int getFontLineHeight() {
+		return this.font.lineHeight;
 	}
 
 	private int renderTextContentAt(
