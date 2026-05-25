@@ -52,5 +52,14 @@
 	"gui.redstone-master.settings.reset_all.title": "Сбросить все настройки?",
 	"gui.redstone-master.settings.reset_all.message": "Все настройки мода будут возвращены к значениям по умолчанию. Это действие нельзя отменить.",
 	"gui.redstone-master.settings.reset_all.confirm": "Сбросить",
-	"gui.redstone-master.settings.reset_all.cancel": "Отмена"
+	"gui.redstone-master.settings.reset_all.cancel": "Отмена",
+	"gui.redstone-master.profile.guest_hint": "Войдите или зарегистрируйтесь, чтобы связать профиль мода с аккаунтом на сайте.",
+	"gui.redstone-master.profile.login": "Войти",
+	"gui.redstone-master.profile.register": "Регистрация",
+	"gui.redstone-master.profile.waiting_browser": "Завершите вход в браузере. После этого откроется профиль в моде.",
+	"gui.redstone-master.profile.login_success": "Вход выполнен успешно.",
+	"gui.redstone-master.profile.signed_in_as": "Вы вошли как %s",
+	"gui.redstone-master.profile.auth.error": "Не удалось завершить вход. Проверьте, что сайт запущен, и попробуйте снова.",
+	"gui.redstone-master.profile.auth.error.website": "Не удалось подключиться к сайту. Запустите веб-приложение и проверьте webBaseUrl в config/redstone-master.json.",
+	"gui.redstone-master.profile.auth.error.browser": "Не удалось открыть браузер. Перейдите на сайт вручную и войдите в аккаунт."
 }

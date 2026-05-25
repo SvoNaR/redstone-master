@@ -52,5 +52,14 @@
 	"gui.redstone-master.settings.reset_all.title": "Reset all settings?",
 	"gui.redstone-master.settings.reset_all.message": "All mod settings will be restored to their defaults. This cannot be undone.",
 	"gui.redstone-master.settings.reset_all.confirm": "Reset",
-	"gui.redstone-master.settings.reset_all.cancel": "Cancel"
+	"gui.redstone-master.settings.reset_all.cancel": "Cancel",
+	"gui.redstone-master.profile.guest_hint": "Sign in or register to link your mod profile with the website account.",
+	"gui.redstone-master.profile.login": "Sign in",
+	"gui.redstone-master.profile.register": "Register",
+	"gui.redstone-master.profile.waiting_browser": "Complete sign-in in your browser. Your mod profile will open afterward.",
+	"gui.redstone-master.profile.login_success": "Signed in successfully.",
+	"gui.redstone-master.profile.signed_in_as": "Signed in as %s",
+	"gui.redstone-master.profile.auth.error": "Could not complete sign-in. Make sure the website is running and try again.",
+	"gui.redstone-master.profile.auth.error.website": "Could not reach the website. Start the web app and check webBaseUrl in config/redstone-master.json.",
+	"gui.redstone-master.profile.auth.error.browser": "Could not open the browser. Open the website manually and sign in."
 }
