@@ -1,1 +1,0 @@
-powershell -Command "& {.\gradlew.bat build; .\gradlew.bat runClient}"
