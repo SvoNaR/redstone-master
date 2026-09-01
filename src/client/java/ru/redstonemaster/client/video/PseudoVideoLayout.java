@@ -32,6 +32,7 @@ public record PseudoVideoLayout(
 			int contentTop,
 			int textX,
 			int textWidth,
+			int maxBottom,
 			int controlsInnerHeight,
 			int controlsInnerWidth,
 			int timeBlockWidth,
@@ -41,7 +42,18 @@ public record PseudoVideoLayout(
 			int seekForwardWidth,
 			Font font
 	) {
-		int[] display = PseudoVideoRenderer.computeDisplaySize(textWidth, 0, PseudoVideoRenderer.NORMAL_DISPLAY_SCALE);
+		int border = PseudoVideoRenderer.FRAME_BORDER_THICKNESS;
+		int chromeHeight = sliderAndControlsHeight(controlsInnerHeight);
+		int maxDisplayHeight = 0;
+		if (maxBottom > contentTop) {
+			int maxVideoBlockHeight = maxBottom - contentTop - chromeHeight;
+			maxDisplayHeight = Math.max(1, maxVideoBlockHeight - border * 2);
+		}
+		int[] display = PseudoVideoRenderer.computeDisplaySize(
+				textWidth,
+				maxDisplayHeight,
+				PseudoVideoRenderer.NORMAL_DISPLAY_SCALE
+		);
 		int frameLeft = PseudoVideoRenderer.frameLeftForDisplay(textX, textWidth, display[0]);
 		return build(
 				frameLeft,
@@ -56,6 +68,11 @@ public record PseudoVideoLayout(
 				seekForwardWidth,
 				font
 		);
+	}
+
+	private static int sliderAndControlsHeight(int controlsInnerHeight) {
+		int border = PseudoVideoRenderer.FRAME_BORDER_THICKNESS;
+		return SLIDER_INNER_HEIGHT + border * 2 + controlsInnerHeight + border * 2;
 	}
 
 	public static PseudoVideoLayout windowFullscreen(

@@ -345,7 +345,7 @@ final class RedstoneMasterTutorialPanel {
 		return this.getVideoSeekButtonWidth("gui.redstone-master.tutorial.video.seek_forward");
 	}
 
-	private PseudoVideoLayout computeVideoLayout(int embeddedContentTop, int textX, int textWidth) {
+	private PseudoVideoLayout computeVideoLayout(int embeddedContentTop, int textX, int textWidth, int maxBottom) {
 		int timeBlockWidth = this.getVideoTimeBlockWidth();
 		int seekBackWidth = this.getVideoSeekBackWidth();
 		int seekForwardWidth = this.getVideoSeekForwardWidth();
@@ -367,6 +367,7 @@ final class RedstoneMasterTutorialPanel {
 				embeddedContentTop,
 				textX,
 				textWidth,
+				maxBottom,
 				VIDEO_CONTROLS_HEIGHT,
 				this.getVideoControlsInnerWidth(),
 				timeBlockWidth,
@@ -814,7 +815,7 @@ final class RedstoneMasterTutorialPanel {
 		if (!this.videoFullscreen || !this.hasActiveStudyVideo()) {
 			return;
 		}
-		PseudoVideoLayout layout = this.computeVideoLayout(0, 0, 0);
+		PseudoVideoLayout layout = this.computeVideoLayout(0, 0, 0, 0);
 		PseudoVideoRenderer.renderPlayer(
 				graphics,
 				this.screen.getFont(),
@@ -861,7 +862,7 @@ final class RedstoneMasterTutorialPanel {
 				y += VIDEO_GAP;
 			}
 			int lineColor = this.getLineColor();
-			PseudoVideoLayout layout = this.computeVideoLayout(y, textX, textWidth);
+			PseudoVideoLayout layout = this.computeVideoLayout(y, textX, textWidth, contentBottom);
 			PseudoVideoRenderer.renderPlayer(
 					graphics,
 					this.screen.getFont(),
@@ -1106,7 +1107,7 @@ final class RedstoneMasterTutorialPanel {
 
 		int textX = innerX + 2;
 		int embeddedTop = this.getEmbeddedVideoContentTop(content, textWidth);
-		PseudoVideoLayout layout = this.computeVideoLayout(embeddedTop, textX, textWidth);
+		PseudoVideoLayout layout = this.computeVideoLayout(embeddedTop, textX, textWidth, contentBottom);
 		int clipTop = this.videoFullscreen ? 0 : listTop;
 		int clipBottom = this.videoFullscreen ? this.screen.getScreenHeight() : contentBottom;
 
@@ -1116,11 +1117,12 @@ final class RedstoneMasterTutorialPanel {
 		this.videoSeekSlider.setHeight(PseudoVideoLayout.SLIDER_INNER_HEIGHT);
 		this.videoSeekSlider.active = PseudoVideoService.get().getPrepareState() == PseudoVideoService.PrepareState.READY;
 		this.videoSeekSlider.syncFromPlayback();
-		boolean sliderVisible = layout.sliderBlockTop() + layout.sliderBlockHeight() >= clipTop
-				&& layout.sliderBlockTop() <= clipBottom;
+		int sliderBottom = layout.sliderWidgetY() + PseudoVideoLayout.SLIDER_INNER_HEIGHT;
+		boolean sliderVisible = sliderBottom >= clipTop && layout.sliderWidgetY() <= clipBottom;
 		this.videoSeekSlider.visible = sliderVisible;
 
 		int controlsY = layout.controlsWidgetY();
+		int controlsBottom = controlsY + VIDEO_CONTROLS_HEIGHT;
 
 		this.videoSeekBackButton.setX(layout.seekBackButtonX());
 		this.videoSeekBackButton.setY(controlsY);
@@ -1133,8 +1135,7 @@ final class RedstoneMasterTutorialPanel {
 		this.videoFullscreenButton.setY(controlsY);
 		this.videoFullscreenButton.setMessage(this.getVideoFullscreenLabel());
 
-		boolean controlsVisible = layout.controlsBlockTop() + layout.controlsBlockHeight() >= clipTop
-				&& layout.controlsBlockTop() <= clipBottom;
+		boolean controlsVisible = controlsY >= clipTop && controlsBottom <= clipBottom;
 		this.videoSeekBackButton.visible = controlsVisible;
 		this.videoPlayPauseButton.visible = controlsVisible;
 		this.videoSeekForwardButton.visible = controlsVisible;
@@ -1329,6 +1330,7 @@ final class RedstoneMasterTutorialPanel {
 					0,
 					0,
 					innerWidth,
+					0,
 					VIDEO_CONTROLS_HEIGHT,
 					this.getVideoControlsInnerWidth(),
 					this.getVideoTimeBlockWidth(),
