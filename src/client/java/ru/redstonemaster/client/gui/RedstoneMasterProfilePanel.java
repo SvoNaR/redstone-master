@@ -40,6 +40,14 @@ final class RedstoneMasterProfilePanel {
 		ModConfig config = ModConfig.get();
 		ModWebAuthService authService = ModWebAuthService.get();
 		if (config.profileLoggedIn) {
+			this.screen.addContentWidget(Button.builder(
+							ModContentLanguage.translatable("gui.redstone-master.profile.logout"),
+							button -> {
+								this.showLoginSuccess = false;
+								authService.logout();
+							})
+					.bounds(buttonX, y, buttonWidth, ROW_HEIGHT)
+					.build());
 			return;
 		}
 		if (authService.getPhase() == ModWebAuthService.AuthPhase.WAITING_BROWSER) {

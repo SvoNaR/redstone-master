@@ -73,7 +73,7 @@ public final class TutorialCatalog {
 				if (file == null || file.sections == null) {
 					return List.of();
 				}
-				return Collections.unmodifiableList(file.sections);
+				return Collections.unmodifiableList(TutorialPackMerger.mergePacks(file.sections, fileCode));
 			}
 		} catch (Exception e) {
 			return List.of();
@@ -120,7 +120,7 @@ public final class TutorialCatalog {
 	public record FilteredSection(TutorialSection section, List<TutorialLesson> lessons, boolean forceExpanded) {
 	}
 
-	private static final class TutorialCatalogFile {
+	static final class TutorialCatalogFile {
 		List<TutorialSection> sections;
 	}
 }

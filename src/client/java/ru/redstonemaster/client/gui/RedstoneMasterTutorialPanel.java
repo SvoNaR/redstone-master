@@ -10,6 +10,10 @@ import ru.redstonemaster.client.gui.tutorial.TutorialLesson;
 import ru.redstonemaster.client.gui.tutorial.TutorialSection;
 import ru.redstonemaster.client.gui.tutorial.TutorialStudyTarget;
 import ru.redstonemaster.client.gui.tutorial.TutorialTextures;
+import ru.redstonemaster.client.video.PseudoVideoLayout;
+import ru.redstonemaster.client.video.PseudoVideoRenderer;
+import ru.redstonemaster.client.video.PseudoVideoSeekSlider;
+import ru.redstonemaster.client.video.PseudoVideoService;
 import ru.redstonemaster.config.ModConfig;
 import ru.redstonemaster.config.ModContentLanguage;
 
@@ -37,9 +41,18 @@ final class RedstoneMasterTutorialPanel {
 	private static final int ARROW_TO_TITLE_GAP = 4;
 	private static final int LESSON_EXTRA_INDENT = 6;
 	private static final int IMAGE_GAP = 10;
+	private static final String VIDEO_GOAL_HEADING_KEY = "gui.redstone-master.tutorial.video.goal_heading";
+	private static final int VIDEO_GAP = 8;
+	private static final int VIDEO_CONTROLS_HEIGHT = 20;
+	private static final int VIDEO_CONTROLS_GAP = 0;
+	private static final int VIDEO_AFTER_CONTROLS_GAP = 10;
+	private static final int VIDEO_GOAL_HEADER_GAP = 4;
+	private static final int VIDEO_PLAY_BUTTON_WIDTH = 28;
 	private static final int COLLAPSE_ALL_GAP = 6;
 
 	private static final int SECTION_COLOR = 0xFFE8C070;
+	private static final int SECTION_TITLE_DOWN_OFFSET = 2;
+	private static final int SECTION_SUMMARY_VERTICAL_PADDING = 1;
 	private static final int LESSON_COLOR = 0xFFFFFFFF;
 	private static final int TEXT_COLOR = 0xFFFFFFFF;
 	private static final int HEADER_LABEL_COLOR = 0xFFE0E0E0;
@@ -61,6 +74,11 @@ final class RedstoneMasterTutorialPanel {
 	private final List<Button> sectionToggleButtons = new ArrayList<>();
 	private Button backButton;
 	private Button collapseAllButton;
+	private Button videoPlayPauseButton;
+	private Button videoSeekBackButton;
+	private Button videoSeekForwardButton;
+	private PseudoVideoSeekSlider videoSeekSlider;
+	private String activeStudyVideoId = "";
 
 	RedstoneMasterTutorialPanel(RedstoneMasterScreen screen) {
 		this.screen = screen;
@@ -71,7 +89,16 @@ final class RedstoneMasterTutorialPanel {
 	}
 
 	void leaveTab() {
+		PseudoVideoService.get().release();
+		this.activeStudyVideoId = "";
 		this.studyTarget = null;
+	}
+
+	void resetToHome() {
+		this.studyTarget = null;
+		this.scrollOffset = 0;
+		this.savedListScrollOffset = 0;
+		this.expandedSections.clear();
 	}
 
 	/** Прокрутка списка разделов для сохранения сессии (не прокрутка страницы «Изучить»). */
@@ -105,9 +132,15 @@ final class RedstoneMasterTutorialPanel {
 	}
 
 	void dispose() {
+		PseudoVideoService.get().release();
+		this.activeStudyVideoId = "";
 		this.searchBox = null;
 		this.backButton = null;
 		this.collapseAllButton = null;
+		this.videoPlayPauseButton = null;
+		this.videoSeekBackButton = null;
+		this.videoSeekForwardButton = null;
+		this.videoSeekSlider = null;
 		this.layoutRows.clear();
 		this.studyButtons.clear();
 		this.sectionToggleButtons.clear();
@@ -118,6 +151,10 @@ final class RedstoneMasterTutorialPanel {
 		this.studyButtons.clear();
 		this.sectionToggleButtons.clear();
 		this.backButton = null;
+		this.videoPlayPauseButton = null;
+		this.videoSeekBackButton = null;
+		this.videoSeekForwardButton = null;
+		this.videoSeekSlider = null;
 
 		int innerX = this.screen.getContentX() + RedstoneMasterScreen.CONTENT_INNER_PADDING;
 		int innerWidth = this.screen.getContentWidth() - RedstoneMasterScreen.CONTENT_INNER_PADDING * 2;
@@ -140,7 +177,69 @@ final class RedstoneMasterTutorialPanel {
 				.build();
 		this.screen.addContentWidget(this.backButton);
 
+		StudyContent content = this.resolveStudyContent();
+		String videoId = content != null && !content.videos().isEmpty() ? content.videos().getFirst() : "";
+		if (!videoId.equals(this.activeStudyVideoId)) {
+			this.activeStudyVideoId = videoId;
+			if (videoId.isBlank()) {
+				PseudoVideoService.get().release();
+			} else {
+				PseudoVideoService.get().activate(videoId);
+			}
+		}
+
+		if (!videoId.isBlank()) {
+			int seekBackWidth = this.getVideoSeekButtonWidth("gui.redstone-master.tutorial.video.seek_back");
+			int seekForwardWidth = this.getVideoSeekButtonWidth("gui.redstone-master.tutorial.video.seek_forward");
+			this.videoSeekBackButton = Button.builder(
+							ModContentLanguage.translatable("gui.redstone-master.tutorial.video.seek_back"),
+							button -> PseudoVideoService.get().seekBackward())
+					.bounds(innerX, 0, seekBackWidth, VIDEO_CONTROLS_HEIGHT)
+					.build();
+			this.videoPlayPauseButton = Button.builder(
+							this.getVideoPlayPauseLabel(),
+							button -> {
+								PseudoVideoService.get().togglePlayPause();
+								button.setMessage(this.getVideoPlayPauseLabel());
+							})
+					.bounds(innerX, 0, VIDEO_PLAY_BUTTON_WIDTH, VIDEO_CONTROLS_HEIGHT)
+					.build();
+			this.videoSeekForwardButton = Button.builder(
+							ModContentLanguage.translatable("gui.redstone-master.tutorial.video.seek_forward"),
+							button -> PseudoVideoService.get().seekForward())
+					.bounds(innerX, 0, seekForwardWidth, VIDEO_CONTROLS_HEIGHT)
+					.build();
+			this.screen.addContentWidget(this.videoSeekBackButton);
+			this.screen.addContentWidget(this.videoPlayPauseButton);
+			this.screen.addContentWidget(this.videoSeekForwardButton);
+
+			this.videoSeekSlider = new PseudoVideoSeekSlider(0, 0, 100, PseudoVideoLayout.SLIDER_INNER_HEIGHT);
+			this.screen.addContentWidget(this.videoSeekSlider);
+			this.setVideoControlsVisible(false);
+			this.layoutStudyVideoControls();
+		}
+
 		this.clampScrollOffset();
+	}
+
+	private Component getVideoPlayPauseLabel() {
+		return PseudoVideoService.get().isPlaying()
+				? ModContentLanguage.translatable("gui.redstone-master.tutorial.video.pause")
+				: ModContentLanguage.translatable("gui.redstone-master.tutorial.video.play");
+	}
+
+	private int getVideoSeekButtonWidth(String key) {
+		return this.screen.getFont().width(ModContentLanguage.get(key)) + STUDY_BUTTON_PADDING;
+	}
+
+	private int getVideoControlsInnerWidth() {
+		return this.getVideoSeekButtonWidth("gui.redstone-master.tutorial.video.seek_back")
+				+ VIDEO_PLAY_BUTTON_WIDTH
+				+ this.getVideoSeekButtonWidth("gui.redstone-master.tutorial.video.seek_forward");
+	}
+
+	private boolean hasActiveStudyVideo() {
+		return this.activeStudyVideoId != null && !this.activeStudyVideoId.isBlank();
 	}
 
 	private void rebuildListWidgets(int innerX, int innerWidth) {
@@ -166,6 +265,14 @@ final class RedstoneMasterTutorialPanel {
 
 			y += SECTION_BLOCK_PADDING;
 			int sectionRowY = y;
+			int sectionTitleMaxWidth = blockInnerWidth - ARROW_BUTTON_SIZE - ARROW_TO_TITLE_GAP - 4;
+			int sectionTitleLines = this.screen.getFont()
+					.split(Component.literal(section.title()), sectionTitleMaxWidth)
+					.size();
+			int sectionRowHeight = Math.max(
+					ROW_HEIGHT,
+					sectionTitleLines * this.screen.getFont().lineHeight
+			);
 
 			Button arrowButton = Button.builder(
 							this.getExpandArrowLabel(expanded),
@@ -175,18 +282,21 @@ final class RedstoneMasterTutorialPanel {
 			this.sectionToggleButtons.add(arrowButton);
 			this.screen.addContentWidget(arrowButton);
 
-			Button sectionStudy = Button.builder(
-							ModContentLanguage.translatable("gui.redstone-master.tutorial.study"),
-							button -> this.openStudy(TutorialStudyTarget.section(section.id())))
-					.bounds(blockInnerX + blockInnerWidth - studyButtonWidth, sectionRowY, studyButtonWidth, ROW_HEIGHT)
-					.build();
-			this.studyButtons.add(sectionStudy);
-			this.screen.addContentWidget(sectionStudy);
-
-			this.layoutRows.add(LayoutRow.sectionHeader(section.title(), sectionRowY, ROW_HEIGHT));
-			y += ROW_HEIGHT + ROW_GAP;
+			this.layoutRows.add(LayoutRow.sectionHeader(section.title(), sectionRowY, sectionRowHeight));
+			y += sectionRowHeight + ROW_GAP;
 
 			if (expanded) {
+				String summary = section.summary();
+				if (summary != null && !summary.isBlank()) {
+					int lineHeight = this.screen.getFont().lineHeight;
+					int summaryLineCount = this.screen.getFont()
+							.split(Component.literal(summary), sectionTitleMaxWidth)
+							.size();
+					int summaryHeight = summaryLineCount * lineHeight + SECTION_SUMMARY_VERTICAL_PADDING * 2;
+					this.layoutRows.add(LayoutRow.sectionSummary(summary, y, summaryHeight));
+					y += summaryHeight + ROW_GAP;
+				}
+
 				int lessonX = blockInnerX + ARROW_BUTTON_SIZE + ARROW_TO_TITLE_GAP + LESSON_EXTRA_INDENT;
 				for (TutorialLesson lesson : entry.lessons()) {
 					int lessonRowY = y;
@@ -287,7 +397,19 @@ final class RedstoneMasterTutorialPanel {
 	}
 
 	private void closeStudy() {
-		this.screen.navigateBack();
+		if (this.studyTarget == null) {
+			return;
+		}
+		PseudoVideoService.get().release();
+		this.activeStudyVideoId = "";
+		this.studyTarget = null;
+		if (ModConfig.get().rememberSession) {
+			this.scrollOffset = this.savedListScrollOffset;
+		} else {
+			this.scrollOffset = 0;
+		}
+		this.screen.rebuildTutorialWidgets();
+		this.screen.onNavigationPointReached();
 	}
 
 	void restoreNavigationState(
@@ -335,7 +457,9 @@ final class RedstoneMasterTutorialPanel {
 			return false;
 		}
 		this.scrollOffset = (int) Math.clamp(this.scrollOffset - scrollY * 12, 0, maxScroll);
-		if (!this.isStudying()) {
+		if (this.isStudying()) {
+			this.layoutStudyVideoControls();
+		} else {
 			this.applyScrollToControls();
 		}
 		return true;
@@ -357,7 +481,7 @@ final class RedstoneMasterTutorialPanel {
 		);
 
 		if (this.studyTarget != null) {
-			this.renderStudyContent(graphics, textX, textWidth, listTop, contentBottom);
+			this.renderStudyContent(graphics, innerX, textX, textWidth, listTop, contentBottom);
 		} else {
 			this.renderListContent(graphics, innerX, innerWidth, textX, textWidth, listTop, contentBottom);
 		}
@@ -367,6 +491,7 @@ final class RedstoneMasterTutorialPanel {
 
 	private void renderStudyContent(
 			GuiGraphics graphics,
+			int innerX,
 			int textX,
 			int textWidth,
 			int listTop,
@@ -377,6 +502,7 @@ final class RedstoneMasterTutorialPanel {
 			return;
 		}
 
+		boolean hasVideo = !content.videos().isEmpty();
 		int y = this.getListTop() - this.scrollOffset;
 		for (var line : this.screen.getFont()
 				.split(Component.literal(content.title()).withStyle(net.minecraft.ChatFormatting.BOLD), textWidth)) {
@@ -386,6 +512,63 @@ final class RedstoneMasterTutorialPanel {
 			y += this.screen.getFont().lineHeight;
 		}
 		y += 4;
+
+		if (hasVideo) {
+			y += VIDEO_GAP;
+			int lineColor = this.getLineColor();
+			PseudoVideoLayout layout = PseudoVideoLayout.at(
+					y,
+					textX,
+					textWidth,
+					VIDEO_CONTROLS_HEIGHT,
+					this.getVideoControlsInnerWidth()
+			);
+			PseudoVideoRenderer.render(
+					graphics,
+					this.screen.getFont(),
+					textX,
+					layout.videoBlockTop(),
+					textWidth,
+					listTop,
+					contentBottom,
+					lineColor
+			);
+			if (layout.sliderBlockTop() + layout.sliderBlockHeight() >= listTop
+					&& layout.sliderBlockTop() <= contentBottom) {
+				PseudoVideoRenderer.drawFrameOutline(
+						graphics,
+						layout.frameLeft(),
+						layout.sliderBlockTop(),
+						layout.frameOuterWidth(),
+						layout.sliderBlockHeight(),
+						lineColor
+				);
+			}
+			if (layout.controlsBlockTop() + layout.controlsBlockHeight() >= listTop
+					&& layout.controlsBlockTop() <= contentBottom) {
+				PseudoVideoRenderer.drawFrameOutline(
+						graphics,
+						layout.controlsFrameLeft(),
+						layout.controlsBlockTop(),
+						layout.controlsFrameOuterWidth(),
+						layout.controlsBlockHeight(),
+						lineColor
+				);
+			}
+			y = layout.controlsBlockTop() + layout.controlsBlockHeight() + VIDEO_AFTER_CONTROLS_GAP;
+			for (var line : this.screen.getFont()
+					.split(
+							Component.literal(ModContentLanguage.get(VIDEO_GOAL_HEADING_KEY))
+									.withStyle(net.minecraft.ChatFormatting.BOLD),
+							textWidth
+					)) {
+				if (y + this.screen.getFont().lineHeight >= listTop && y <= contentBottom) {
+					graphics.drawString(this.screen.getFont(), line, textX, y, SECTION_COLOR, true);
+				}
+				y += this.screen.getFont().lineHeight;
+			}
+			y += VIDEO_GOAL_HEADER_GAP;
+		}
 
 		for (var line : this.screen.getFont().split(Component.literal(content.body()), textWidth)) {
 			if (y + this.screen.getFont().lineHeight >= listTop && y <= contentBottom) {
@@ -424,7 +607,7 @@ final class RedstoneMasterTutorialPanel {
 			if (section == null) {
 				return null;
 			}
-			return new StudyContent(section.title(), section.summary(), section.sources(), section.imagePaths());
+			return new StudyContent(section.title(), section.summary(), section.sources(), section.imagePaths(), List.of());
 		}
 		if (this.studyTarget instanceof TutorialStudyTarget.LessonTarget lessonTarget) {
 			TutorialLesson lesson = TutorialCatalog.findLesson(lessonTarget.sectionId(), lessonTarget.lessonId());
@@ -433,7 +616,7 @@ final class RedstoneMasterTutorialPanel {
 				return null;
 			}
 			String sources = section != null ? section.sources() : "";
-			return new StudyContent(lesson.title(), lesson.body(), sources, lesson.imagePaths());
+			return new StudyContent(lesson.title(), lesson.body(), sources, lesson.imagePaths(), lesson.videoIds());
 		}
 		return null;
 	}
@@ -451,8 +634,7 @@ final class RedstoneMasterTutorialPanel {
 		int studyButtonWidth = this.getStudyButtonWidth();
 		int blockInnerX = innerX + SECTION_BLOCK_PADDING;
 		int sectionTitleX = blockInnerX + ARROW_BUTTON_SIZE + ARROW_TO_TITLE_GAP;
-		int sectionTitleMaxWidth = innerWidth - SECTION_BLOCK_PADDING * 2 - ARROW_BUTTON_SIZE
-				- ARROW_TO_TITLE_GAP - studyButtonWidth - 4;
+		int sectionTitleMaxWidth = innerWidth - SECTION_BLOCK_PADDING * 2 - ARROW_BUTTON_SIZE - ARROW_TO_TITLE_GAP - 4;
 		int lessonX = sectionTitleX + LESSON_EXTRA_INDENT;
 
 		for (LayoutRow row : this.layoutRows) {
@@ -497,13 +679,24 @@ final class RedstoneMasterTutorialPanel {
 					);
 				}
 			} else if (row.sectionTitle != null) {
-				int textY = drawY + (ROW_HEIGHT - this.screen.getFont().lineHeight) / 2;
-				if (textY + this.screen.getFont().lineHeight >= listTop && textY <= contentBottom) {
-					for (var line : this.screen.getFont()
-							.split(Component.literal(row.sectionTitle), sectionTitleMaxWidth)) {
+				var titleLines = this.screen.getFont()
+						.split(Component.literal(row.sectionTitle), sectionTitleMaxWidth);
+				int textHeight = titleLines.size() * this.screen.getFont().lineHeight;
+				int textY = drawY + Math.max(0, (row.rowHeight - textHeight) / 2) + SECTION_TITLE_DOWN_OFFSET;
+				for (var line : titleLines) {
+					if (textY + this.screen.getFont().lineHeight >= listTop && textY <= contentBottom) {
 						graphics.drawString(this.screen.getFont(), line, sectionTitleX, textY, SECTION_COLOR, true);
-						textY += this.screen.getFont().lineHeight;
 					}
+					textY += this.screen.getFont().lineHeight;
+				}
+			} else if (row.sectionSummary != null) {
+				int lineY = drawY + SECTION_SUMMARY_VERTICAL_PADDING;
+				for (var line : this.screen.getFont()
+						.split(Component.literal(row.sectionSummary), sectionTitleMaxWidth)) {
+					if (lineY + this.screen.getFont().lineHeight >= listTop && lineY <= contentBottom) {
+						graphics.drawString(this.screen.getFont(), line, sectionTitleX, lineY, DISCLAIMER_COLOR, true);
+					}
+					lineY += this.screen.getFont().lineHeight;
 				}
 			} else if (row.lessonTitle != null) {
 				if (drawY + this.screen.getFont().lineHeight >= listTop && drawY <= contentBottom) {
@@ -520,6 +713,89 @@ final class RedstoneMasterTutorialPanel {
 		}
 	}
 
+	void layoutStudyVideoControls() {
+		if (!this.isStudying() || !this.hasActiveStudyVideo()) {
+			return;
+		}
+		int innerX = this.screen.getContentX() + RedstoneMasterScreen.CONTENT_INNER_PADDING;
+		int innerWidth = this.screen.getContentWidth() - RedstoneMasterScreen.CONTENT_INNER_PADDING * 2;
+		int textWidth = innerWidth - 4;
+		this.layoutStudyVideoControls(innerX, textWidth, this.getListTop(), this.getScrollableContentBottom());
+	}
+
+	private void layoutStudyVideoControls(int innerX, int textWidth, int listTop, int contentBottom) {
+		if (!this.hasActiveStudyVideo()
+				|| this.videoPlayPauseButton == null
+				|| this.videoSeekBackButton == null
+				|| this.videoSeekForwardButton == null
+				|| this.videoSeekSlider == null) {
+			return;
+		}
+
+		StudyContent content = this.resolveStudyContent();
+		if (content == null) {
+			return;
+		}
+
+		int textX = innerX + 2;
+		int y = this.getListTop() - this.scrollOffset;
+		y += this.screen.getFont()
+						.split(Component.literal(content.title()).withStyle(net.minecraft.ChatFormatting.BOLD), textWidth)
+						.size()
+				* this.screen.getFont().lineHeight
+				+ 4;
+		y += VIDEO_GAP;
+		PseudoVideoLayout layout = PseudoVideoLayout.at(
+				y,
+				textX,
+				textWidth,
+				VIDEO_CONTROLS_HEIGHT,
+				this.getVideoControlsInnerWidth()
+		);
+
+		this.videoSeekSlider.setX(layout.sliderWidgetX());
+		this.videoSeekSlider.setY(layout.sliderWidgetY());
+		this.videoSeekSlider.setWidth(layout.sliderWidgetWidth());
+		this.videoSeekSlider.setHeight(PseudoVideoLayout.SLIDER_INNER_HEIGHT);
+		this.videoSeekSlider.active = PseudoVideoService.get().getPrepareState() == PseudoVideoService.PrepareState.READY;
+		this.videoSeekSlider.syncFromPlayback();
+		boolean sliderVisible = layout.sliderBlockTop() + layout.sliderBlockHeight() >= listTop
+				&& layout.sliderBlockTop() <= contentBottom;
+		this.videoSeekSlider.visible = sliderVisible;
+
+		int controlsY = layout.controlsWidgetY();
+		int seekBackWidth = this.videoSeekBackButton.getWidth();
+		int startX = layout.controlsWidgetX();
+
+		this.videoSeekBackButton.setX(startX);
+		this.videoSeekBackButton.setY(controlsY);
+		this.videoPlayPauseButton.setX(startX + seekBackWidth);
+		this.videoPlayPauseButton.setY(controlsY);
+		this.videoSeekForwardButton.setX(startX + seekBackWidth + this.videoPlayPauseButton.getWidth());
+		this.videoSeekForwardButton.setY(controlsY);
+
+		boolean controlsVisible = layout.controlsBlockTop() + layout.controlsBlockHeight() >= listTop
+				&& layout.controlsBlockTop() <= contentBottom;
+		this.videoSeekBackButton.visible = controlsVisible;
+		this.videoPlayPauseButton.visible = controlsVisible;
+		this.videoSeekForwardButton.visible = controlsVisible;
+	}
+
+	private void setVideoControlsVisible(boolean visible) {
+		if (this.videoSeekBackButton != null) {
+			this.videoSeekBackButton.visible = visible;
+		}
+		if (this.videoPlayPauseButton != null) {
+			this.videoPlayPauseButton.visible = visible;
+		}
+		if (this.videoSeekForwardButton != null) {
+			this.videoSeekForwardButton.visible = visible;
+		}
+		if (this.videoSeekSlider != null) {
+			this.videoSeekSlider.visible = visible;
+		}
+	}
+
 	private void applyScrollToControls() {
 		int listTop = this.getListTop();
 		int contentBottom = this.getScrollableContentBottom();
@@ -531,18 +807,14 @@ final class RedstoneMasterTutorialPanel {
 				continue;
 			}
 			int displayY = row.y - this.scrollOffset;
-			boolean visible = displayY >= listTop - 1 && displayY + ROW_HEIGHT <= contentBottom + 1;
+			boolean visible = displayY >= listTop - 1 && displayY + row.rowHeight <= contentBottom + 1;
 
 			if (row.sectionTitle != null) {
 				if (toggleIndex < this.sectionToggleButtons.size()) {
 					Button arrow = this.sectionToggleButtons.get(toggleIndex++);
 					arrow.setY(displayY);
+					arrow.setHeight(ROW_HEIGHT);
 					arrow.visible = visible;
-				}
-				if (studyIndex < this.studyButtons.size()) {
-					Button study = this.studyButtons.get(studyIndex++);
-					study.setY(displayY);
-					study.visible = visible;
 				}
 			} else if (row.lessonTitle != null && studyIndex < this.studyButtons.size()) {
 				Button study = this.studyButtons.get(studyIndex++);
@@ -568,6 +840,22 @@ final class RedstoneMasterTutorialPanel {
 		int height = 0;
 		height += this.screen.getFont().split(Component.literal(content.title()), innerWidth).size()
 				* this.screen.getFont().lineHeight + 4;
+		boolean hasVideo = !content.videos().isEmpty();
+		if (hasVideo) {
+			height += VIDEO_GAP + PseudoVideoLayout.at(
+					0,
+					0,
+					innerWidth,
+					VIDEO_CONTROLS_HEIGHT,
+					this.getVideoControlsInnerWidth()
+			).totalHeight();
+			height += VIDEO_AFTER_CONTROLS_GAP;
+			height += this.screen.getFont()
+							.split(ModContentLanguage.translatable(VIDEO_GOAL_HEADING_KEY), innerWidth)
+							.size()
+					* this.screen.getFont().lineHeight
+					+ VIDEO_GOAL_HEADER_GAP;
+		}
 		height += this.screen.getFont().split(Component.literal(content.body()), innerWidth).size()
 				* this.screen.getFont().lineHeight + IMAGE_GAP;
 		height += TutorialTextures.measureImagesHeight(content.images(), innerWidth, IMAGE_GAP);
@@ -638,11 +926,12 @@ final class RedstoneMasterTutorialPanel {
 		this.scrollOffset = (int) Math.clamp(this.scrollOffset, 0, this.getMaxScroll());
 	}
 
-	private record StudyContent(String title, String body, String sources, List<String> images) {
+	private record StudyContent(String title, String body, String sources, List<String> images, List<String> videos) {
 	}
 
 	private static final class LayoutRow {
 		private final String sectionTitle;
+		private final String sectionSummary;
 		private final String lessonTitle;
 		private final int y;
 		private final int rowHeight;
@@ -654,6 +943,7 @@ final class RedstoneMasterTutorialPanel {
 
 		private LayoutRow(
 				String sectionTitle,
+				String sectionSummary,
 				String lessonTitle,
 				int y,
 				int rowHeight,
@@ -664,6 +954,7 @@ final class RedstoneMasterTutorialPanel {
 				boolean isSectionBlock
 		) {
 			this.sectionTitle = sectionTitle;
+			this.sectionSummary = sectionSummary;
 			this.lessonTitle = lessonTitle;
 			this.y = y;
 			this.rowHeight = rowHeight;
@@ -675,31 +966,35 @@ final class RedstoneMasterTutorialPanel {
 		}
 
 		static LayoutRow sectionHeader(String sectionTitle, int y, int rowHeight) {
-			return new LayoutRow(sectionTitle, null, y, rowHeight, false, false, false, false, false);
+			return new LayoutRow(sectionTitle, null, null, y, rowHeight, false, false, false, false, false);
+		}
+
+		static LayoutRow sectionSummary(String sectionSummary, int y, int rowHeight) {
+			return new LayoutRow(null, sectionSummary, null, y, rowHeight, false, false, false, false, false);
 		}
 
 		static LayoutRow lesson(String lessonTitle, int y, int rowHeight) {
-			return new LayoutRow(null, lessonTitle, y, rowHeight, false, false, false, false, false);
+			return new LayoutRow(null, null, lessonTitle, y, rowHeight, false, false, false, false, false);
 		}
 
 		static LayoutRow sectionBlock(int y, int rowHeight) {
-			return new LayoutRow(null, null, y, rowHeight, false, false, false, false, true);
+			return new LayoutRow(null, null, null, y, rowHeight, false, false, false, false, true);
 		}
 
 		static LayoutRow disclaimer(int y, int rowHeight) {
-			return new LayoutRow(null, null, y, rowHeight, false, false, true, false, false);
+			return new LayoutRow(null, null, null, y, rowHeight, false, false, true, false, false);
 		}
 
 		static LayoutRow sectionsHeader(int y, int rowHeight) {
-			return new LayoutRow(null, null, y, rowHeight, false, false, false, true, false);
+			return new LayoutRow(null, null, null, y, rowHeight, false, false, false, true, false);
 		}
 
 		static LayoutRow empty(int y) {
-			return new LayoutRow(null, null, y, ROW_HEIGHT, true, false, false, false, false);
+			return new LayoutRow(null, null, null, y, ROW_HEIGHT, true, false, false, false, false);
 		}
 
 		static LayoutRow studyBody(int y) {
-			return new LayoutRow(null, null, y, 0, false, true, false, false, false);
+			return new LayoutRow(null, null, null, y, 0, false, true, false, false, false);
 		}
 	}
 }

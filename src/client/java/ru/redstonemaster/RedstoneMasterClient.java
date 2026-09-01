@@ -13,6 +13,7 @@ import org.lwjgl.glfw.GLFW;
 import ru.redstonemaster.client.auth.ModWebAuthService;
 import ru.redstonemaster.client.gui.RedstoneMasterScreen;
 import ru.redstonemaster.client.profile.ModAvatarManager;
+import ru.redstonemaster.client.video.PseudoVideoService;
 import ru.redstonemaster.config.ModConfig;
 import ru.redstonemaster.config.ModContentLanguage;
 
@@ -61,6 +62,7 @@ public class RedstoneMasterClient implements ClientModInitializer {
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			ModWebAuthService.get().tick(client);
+			PseudoVideoService.get().tick(client);
 			if (client.screen instanceof RedstoneMasterScreen modScreen) {
 				if (ModWebAuthService.get().consumeProfileUiStale()) {
 					modScreen.rebuildAllWidgets();
@@ -124,9 +126,13 @@ public class RedstoneMasterClient implements ClientModInitializer {
 
 		if (suppressNextOpenKey) {
 			suppressNextOpenKey = false;
-			while (openGuiKey.consumeClick()) {
+			// Подавляем только «хвост» того же нажатия в мире (screen == null).
+			// После закрытия из меню screen — TitleScreen; следующее ] должно открыть мод.
+			if (client.screen == null) {
+				while (openGuiKey.consumeClick()) {
+				}
+				return;
 			}
-			return;
 		}
 
 		ModConfig config = ModConfig.get();

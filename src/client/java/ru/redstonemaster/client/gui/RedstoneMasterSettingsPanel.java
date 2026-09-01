@@ -32,7 +32,7 @@ final class RedstoneMasterSettingsPanel {
 	private static final int RESET_BUTTON_GAP = 2;
 	private static final int RESET_ALL_GAP = 6;
 	private static final int TEXT_COLOR = 0xFFFFFFFF;
-	private static final int SECTION_COLOR = 0xFFE0E0E0;
+	private static final int SECTION_COLOR = 0xFFE8C070;
 	private static final int DISCLAIMER_COLOR = 0xFFBBBBBB;
 
 	private final RedstoneMasterScreen screen;

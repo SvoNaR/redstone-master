@@ -57,7 +57,10 @@ public class RedstoneMasterScreen extends Screen {
 	private static final float MAIN_MENU_GREETING_SCALE = 1.5f;
 	private static final int MAIN_MENU_GREETING_BOTTOM_GAP_LINES = 1;
 	private static final int MAIN_MENU_BLOCK_GAP = 4;
-	private static final int CREDIT_SVONAR_COLOR = 0xFFFF4444;
+	private static final int MAIN_MENU_SECTION_GAP = 7;
+	private static final int MAIN_MENU_LINE_EXTRA = 3;
+	private static final int MAIN_MENU_SECTION_COLOR = 0xFFE8C070;
+	private static final int CREDIT_SVONAR_COLOR = 0xFF800020;
 	private static final int CREDIT_FOXICY_COLOR = 0xFF55FF55;
 	private static final String MAIN_MENU_BRAND = "Redstone Master";
 	private static final String MAIN_MENU_GREETING_KEY = "gui.redstone-master.main_menu.greeting";
@@ -293,6 +296,11 @@ public class RedstoneMasterScreen extends Screen {
 	}
 
 	private void selectTab(RedstoneMasterTab tab) {
+		if (tab == RedstoneMasterTab.TUTORIAL && this.currentTab == RedstoneMasterTab.TUTORIAL) {
+			this.tutorialPanel.resetToHome();
+			this.rebuildNavigation();
+			return;
+		}
 		if (this.currentTab == RedstoneMasterTab.SETTINGS && tab != RedstoneMasterTab.SETTINGS) {
 			this.persistSettingsScroll();
 		}
@@ -319,9 +327,7 @@ public class RedstoneMasterScreen extends Screen {
 			this.applyNavigationSnapshot(snapshot);
 			return;
 		}
-		if (this.previousScreen != null) {
-			this.onClose();
-		}
+		this.onClose();
 	}
 
 	public void navigateForward() {
@@ -446,6 +452,9 @@ public class RedstoneMasterScreen extends Screen {
 
 	@Override
 	public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
+		if (this.currentTab == RedstoneMasterTab.TUTORIAL) {
+			this.tutorialPanel.layoutStudyVideoControls();
+		}
 		super.render(graphics, mouseX, mouseY, delta);
 		this.renderProfileTabAvatar(graphics);
 		this.renderDecorations(graphics);
@@ -541,9 +550,8 @@ public class RedstoneMasterScreen extends Screen {
 				maxTextBottom
 		);
 		textY += MAIN_MENU_BLOCK_GAP;
-		this.renderStyledTextBlock(
+		this.renderMainMenuBody(
 				graphics,
-				RedstoneMasterTab.MAIN_MENU.getContent(),
 				textX,
 				textY,
 				textWidth,
@@ -552,8 +560,49 @@ public class RedstoneMasterScreen extends Screen {
 		this.renderMainMenuFooter(graphics);
 	}
 
+	private void renderMainMenuBody(
+			GuiGraphics graphics,
+			int textX,
+			int textY,
+			int textWidth,
+			int maxTextBottom
+	) {
+		String body = ModContentLanguage.get("gui.redstone-master.main_menu.body");
+		for (String block : body.split("\n\n")) {
+			if (block.isBlank()) {
+				continue;
+			}
+			int newline = block.indexOf('\n');
+			String header = newline >= 0 ? block.substring(0, newline).trim() : block.trim();
+			String content = newline >= 0 ? block.substring(newline + 1).trim() : "";
+
+			for (FormattedCharSequence line : this.font.split(
+					Component.literal(header).withStyle(net.minecraft.ChatFormatting.BOLD),
+					textWidth
+			)) {
+				if (textY + this.font.lineHeight > maxTextBottom) {
+					return;
+				}
+				graphics.drawString(this.font, line, textX, textY, MAIN_MENU_SECTION_COLOR, true);
+				textY += this.font.lineHeight + MAIN_MENU_LINE_EXTRA;
+			}
+
+			if (!content.isEmpty()) {
+				for (FormattedCharSequence line : this.font.split(Component.literal(content), textWidth)) {
+					if (textY + this.font.lineHeight > maxTextBottom) {
+						return;
+					}
+					graphics.drawString(this.font, line, textX, textY, TEXT_COLOR, true);
+					textY += this.font.lineHeight + MAIN_MENU_LINE_EXTRA;
+				}
+			}
+
+			textY += MAIN_MENU_SECTION_GAP;
+		}
+	}
+
 	private Component buildMainMenuTitleLine() {
-		return this.coloredLiteral(MAIN_MENU_BRAND, TITLE_COLOR)
+		return this.coloredLiteral(MAIN_MENU_BRAND, TEXT_COLOR)
 				.append(this.coloredLiteral(ModContentLanguage.get(MAIN_MENU_TITLE_SUFFIX_KEY), TEXT_COLOR));
 	}
 

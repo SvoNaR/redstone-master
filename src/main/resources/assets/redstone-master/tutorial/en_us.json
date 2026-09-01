@@ -19,6 +19,9 @@
             "textures/tutorial/carry_signal_lever.png",
             "textures/tutorial/carry_signal_dust.png",
             "textures/tutorial/carry_signal_lamp.png"
+          ],
+          "videos": [
+            "carry_signal_demo"
           ]
         },
         {

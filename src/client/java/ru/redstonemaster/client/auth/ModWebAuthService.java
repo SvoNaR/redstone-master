@@ -88,6 +88,24 @@ public final class ModWebAuthService {
 		return false;
 	}
 
+	public void logout() {
+		if (this.phase.get() == AuthPhase.WAITING_BROWSER) {
+			return;
+		}
+		ModConfig config = ModConfig.get();
+		config.profileLoggedIn = false;
+		config.profileUsername = "";
+		config.profileAvatarUrl = "";
+		config.save();
+		this.lastErrorKey = null;
+		this.phase.set(AuthPhase.IDLE);
+		this.pendingOpenProfile = false;
+		this.pendingLoginSuccess = false;
+		ModAvatarManager.resetPendingLoads();
+		ModAvatarManager.resetToDefaultGuestAvatar();
+		this.profileUiStale = true;
+	}
+
 	public void beginAuth(String mode) {
 		if (this.phase.get() == AuthPhase.WAITING_BROWSER) {
 			return;
@@ -192,6 +210,7 @@ public final class ModWebAuthService {
 		config.profileUsername = profile.username();
 		config.profileAvatarUrl = resolveAvatarUrl(profile.avatarUrl());
 		config.save();
+		ModAvatarManager.resetPendingLoads();
 		ModAvatarManager.loadProfileAvatar();
 	}
 
