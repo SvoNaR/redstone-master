@@ -1,0 +1,39 @@
+# Gradle / Fabric Loom
+.gradle/
+build/
+out/
+classes/
+
+# Dev client (worlds, logs, local config)
+run/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.settings/
+.vscode/
+bin/
+.classpath
+.project
+
+# macOS / Windows
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Java crash / profiling
+hs_err_*.log
+replay_*.log
+*.hprof
+*.jfr
+
+# Web app: секреты и БД (см. other_projects/redstone-master-web/.gitignore)
+other_projects/redstone-master-web/application-local.properties
+other_projects/redstone-master-web/data/
+other_projects/redstone-master-web/.env
+other_projects/redstone-master-web/.env.*
+
+# Eclipse
+*.launch
