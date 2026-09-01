@@ -33,6 +33,12 @@ public class ModConfig {
 	public boolean profileLoggedIn = false;
 	public String profileUsername = "";
 	public String profileAvatarUrl = "";
+	public String profileSyncToken = "";
+	public String profileEmail = "";
+	public String profileRole = "";
+	public String profileCreatedAt = "";
+	public int profileCompletedLessons = 0;
+	public int profileTotalLessons = 0;
 	public List<String> completedTutorialLessons = new ArrayList<>();
 
 	public static ModConfig get() {
@@ -54,6 +60,18 @@ public class ModConfig {
 				instance.clampPanelScale();
 				if (instance.completedTutorialLessons == null) {
 					instance.completedTutorialLessons = new ArrayList<>();
+				}
+				if (instance.profileSyncToken == null) {
+					instance.profileSyncToken = "";
+				}
+				if (instance.profileEmail == null) {
+					instance.profileEmail = "";
+				}
+				if (instance.profileRole == null) {
+					instance.profileRole = "";
+				}
+				if (instance.profileCreatedAt == null) {
+					instance.profileCreatedAt = "";
 				}
 			} catch (IOException | com.google.gson.JsonSyntaxException e) {
 				instance = new ModConfig();

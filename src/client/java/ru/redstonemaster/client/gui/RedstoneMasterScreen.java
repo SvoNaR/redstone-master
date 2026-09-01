@@ -487,7 +487,6 @@ public class RedstoneMasterScreen extends Screen {
 		if (this.currentTab == RedstoneMasterTab.TUTORIAL) {
 			this.tutorialPanel.layoutStudyVideoControls();
 		}
-		this.renderProfileTabAvatar(graphics);
 		this.renderDecorations(graphics);
 		this.renderContent(graphics);
 		if (this.currentTab == RedstoneMasterTab.SETTINGS) {
@@ -501,6 +500,7 @@ public class RedstoneMasterScreen extends Screen {
 			this.profilePanel.render(graphics);
 		}
 		super.render(graphics, mouseX, mouseY, delta);
+		this.renderProfileTabAvatar(graphics);
 	}
 
 	private int getLineColor() {
@@ -716,6 +716,10 @@ public class RedstoneMasterScreen extends Screen {
 
 	int getFontLineHeight() {
 		return this.font.lineHeight;
+	}
+
+	net.minecraft.client.gui.Font getScreenFont() {
+		return this.font;
 	}
 
 	private int renderTextContentAt(

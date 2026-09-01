@@ -1,6 +1,7 @@
 package ru.redstonemaster;
 
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
@@ -13,6 +14,7 @@ import org.lwjgl.glfw.GLFW;
 import ru.redstonemaster.client.auth.ModWebAuthService;
 import ru.redstonemaster.client.gui.RedstoneMasterScreen;
 import ru.redstonemaster.client.profile.ModAvatarManager;
+import ru.redstonemaster.client.sync.ModTutorialSyncService;
 import ru.redstonemaster.client.video.PseudoVideoService;
 import ru.redstonemaster.config.ModConfig;
 import ru.redstonemaster.config.ModContentLanguage;
@@ -38,6 +40,8 @@ public class RedstoneMasterClient implements ClientModInitializer {
 		ModConfig.load();
 		ModAvatarManager.ensureGuestAvatar();
 		ModAvatarManager.loadProfileAvatar();
+
+		ClientLifecycleEvents.CLIENT_STOPPING.register(client -> ModTutorialSyncService.get().pushProgressBlocking());
 
 		openGuiKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
 				"key.redstone-master.open_gui",

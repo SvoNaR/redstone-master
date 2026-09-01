@@ -5,6 +5,7 @@ import com.google.gson.JsonSyntaxException;
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
 import ru.redstonemaster.client.profile.ModAvatarManager;
+import ru.redstonemaster.client.sync.ModTutorialSyncService;
 import ru.redstonemaster.config.ModConfig;
 
 import java.awt.Desktop;
@@ -39,7 +40,30 @@ public final class ModWebAuthService {
 		FAILED
 	}
 
-	private record ExchangeResponse(String username, String avatarUrl) {
+	public record AuthProfile(
+			String username,
+			String avatarUrl,
+			String syncToken,
+			String email,
+			String role,
+			String createdAt,
+			int completedLessons,
+			int totalLessons,
+			java.util.List<String> completedLessonKeys
+	) {
+	}
+
+	private record ExchangeResponse(
+			String username,
+			String avatarUrl,
+			String syncToken,
+			String email,
+			String role,
+			String createdAt,
+			int completedLessons,
+			int totalLessons,
+			java.util.List<String> completedLessonKeys
+	) {
 	}
 
 	private final AtomicReference<AuthPhase> phase = new AtomicReference<>(AuthPhase.IDLE);
@@ -88,14 +112,25 @@ public final class ModWebAuthService {
 		return false;
 	}
 
+	public void markProfileUiStale() {
+		this.profileUiStale = true;
+	}
+
 	public void logout() {
 		if (this.phase.get() == AuthPhase.WAITING_BROWSER) {
 			return;
 		}
+		ModTutorialSyncService.get().pushProgressBlocking();
 		ModConfig config = ModConfig.get();
 		config.profileLoggedIn = false;
 		config.profileUsername = "";
 		config.profileAvatarUrl = "";
+		config.profileSyncToken = "";
+		config.profileEmail = "";
+		config.profileRole = "";
+		config.profileCreatedAt = "";
+		config.profileCompletedLessons = 0;
+		config.profileTotalLessons = 0;
 		config.save();
 		this.lastErrorKey = null;
 		this.phase.set(AuthPhase.IDLE);
@@ -131,27 +166,37 @@ public final class ModWebAuthService {
 
 	private void runAuthFlow(String mode) {
 		ModAuthCallbackServer server = null;
+		String state = null;
+		int port = -1;
 		try {
+			LOGGER.info("Mod auth: checking website at {}", ModConfig.get().webBaseUrl);
 			this.ensureWebsiteReachable();
 
 			server = new ModAuthCallbackServer();
 			this.callbackServer = server;
-			int port = server.start();
-			String state = UUID.randomUUID().toString();
+			port = server.start();
+			state = UUID.randomUUID().toString();
 			String lang = webLangCode();
 			String normalizedMode = "register".equals(mode) ? "register" : "login";
 			String startUrl = buildStartUrl(state, port, normalizedMode, lang);
+			LOGGER.info("Mod auth: callback server on 127.0.0.1:{}, state={}, opening browser", port, state);
 			openBrowser(URI.create(startUrl));
 
-			ModAuthCallbackServer.CallbackPayload payload = server.callbackFuture().join();
+			LOGGER.info("Mod auth: waiting for browser callback on port {}", port);
+			ModAuthCallbackServer.CallbackPayload payload = server.callbackFuture()
+					.orTimeout(10, java.util.concurrent.TimeUnit.MINUTES)
+					.join();
+			LOGGER.info("Mod auth: callback received for state={}", payload.state());
 			ExchangeResponse profile = this.exchange(payload.state(), payload.code());
+			LOGGER.info("Mod auth: exchange succeeded for user={}", profile.username());
 			this.applyProfile(profile);
+			ModTutorialSyncService.get().pushProgressAsync();
 			this.phase.set(AuthPhase.IDLE);
 			this.pendingOpenProfile = true;
 			this.pendingLoginSuccess = true;
 			this.profileUiStale = true;
 		} catch (Exception exception) {
-			LOGGER.error("Mod auth failed", exception);
+			LOGGER.error("Mod auth failed (state={}, port={}): {}", state, port, exception.toString(), exception);
 			this.lastErrorKey = resolveErrorKey(exception);
 			this.phase.set(AuthPhase.FAILED);
 			this.profileUiStale = true;
@@ -188,11 +233,14 @@ public final class ModWebAuthService {
 				.build();
 		HttpResponse<String> response = createHttpClient()
 				.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+		String responseBody = response.body() != null ? response.body() : "";
 		if (response.statusCode() != 200) {
-			throw new IOException("Exchange failed: HTTP " + response.statusCode() + " " + response.body());
+			LOGGER.error("Mod auth exchange HTTP {}: {}", response.statusCode(), responseBody);
+			throw new IOException("Exchange failed: HTTP " + response.statusCode() + " " + responseBody);
 		}
-		ExchangeResponse parsed = GSON.fromJson(response.body(), ExchangeResponse.class);
+		ExchangeResponse parsed = GSON.fromJson(responseBody, ExchangeResponse.class);
 		if (parsed == null || parsed.username() == null || parsed.username().isBlank()) {
+			LOGGER.error("Mod auth exchange invalid JSON: {}", responseBody);
 			throw new JsonSyntaxException("Invalid exchange response");
 		}
 		return parsed;
@@ -210,19 +258,45 @@ public final class ModWebAuthService {
 		config.profileUsername = profile.username();
 		config.profileAvatarUrl = resolveAvatarUrl(profile.avatarUrl());
 		config.save();
+		ModTutorialSyncService.get().applyProfileFromAuth(new AuthProfile(
+				profile.username(),
+				profile.avatarUrl(),
+				profile.syncToken(),
+				profile.email(),
+				profile.role(),
+				profile.createdAt(),
+				profile.completedLessons(),
+				profile.totalLessons(),
+				profile.completedLessonKeys()
+		));
 		ModAvatarManager.resetPendingLoads();
 		ModAvatarManager.loadProfileAvatar();
 	}
 
 	private static String resolveErrorKey(Exception exception) {
-		if (exception instanceof IOException && exception.getMessage() != null) {
-			String message = exception.getMessage().toLowerCase();
-			if (message.contains("website") || message.contains("connect") || message.contains("http")) {
+		Throwable cause = exception;
+		while (cause.getCause() != null && cause.getCause() != cause) {
+			cause = cause.getCause();
+		}
+		String message = cause.getMessage();
+		if (message != null) {
+			String lower = message.toLowerCase();
+			if (lower.contains("website")
+					|| lower.contains("connect")
+					|| lower.contains("http")
+					|| lower.contains("timed out")
+					|| lower.contains("timeout")) {
 				return "gui.redstone-master.profile.auth.error.website";
 			}
-			if (message.contains("browser")) {
+			if (lower.contains("browser")) {
 				return "gui.redstone-master.profile.auth.error.browser";
 			}
+			if (lower.contains("exchange failed") || lower.contains("invalid mod auth")) {
+				return "gui.redstone-master.profile.auth.error";
+			}
+		}
+		if (cause instanceof java.util.concurrent.TimeoutException) {
+			return "gui.redstone-master.profile.auth.error.website";
 		}
 		return "gui.redstone-master.profile.auth.error";
 	}
@@ -246,7 +320,7 @@ public final class ModWebAuthService {
 		return normalizeBaseUrl(ModConfig.get().webBaseUrl) + avatarUrl;
 	}
 
-	static String normalizeBaseUrl(String baseUrl) {
+	public static String normalizeBaseUrl(String baseUrl) {
 		if (baseUrl == null || baseUrl.isBlank()) {
 			return "http://localhost:8080";
 		}

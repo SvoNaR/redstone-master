@@ -56,9 +56,20 @@ public final class ModAuthCallbackServer implements AutoCloseable {
 	private void acceptLoop() {
 		try {
 			while (this.serverSocket != null && !this.serverSocket.isClosed() && !this.callbackFuture.isDone()) {
-				try (Socket client = this.serverSocket.accept()) {
+				Socket client = this.serverSocket.accept();
+				try {
 					this.handleClient(client);
-					return;
+				} catch (IOException exception) {
+					if (!this.callbackFuture.isDone()) {
+						this.callbackFuture.completeExceptionally(exception);
+						return;
+					}
+					LOGGER.debug("Mod auth callback: client error after auth completed", exception);
+				} finally {
+					try {
+						client.close();
+					} catch (IOException ignored) {
+					}
 				}
 			}
 		} catch (IOException exception) {
@@ -70,20 +81,19 @@ public final class ModAuthCallbackServer implements AutoCloseable {
 	}
 
 	private void handleClient(Socket client) throws IOException {
-		String requestLine;
-		try (BufferedReader reader = new BufferedReader(
-				new InputStreamReader(client.getInputStream(), StandardCharsets.US_ASCII))) {
-			requestLine = reader.readLine();
-			while (true) {
-				String line = reader.readLine();
-				if (line == null || line.isEmpty()) {
-					break;
-				}
-			}
+		String requestLine = this.readRequestLine(client);
+		if (requestLine == null) {
+			LOGGER.debug("Mod auth callback: empty request");
+			this.tryWriteResponse(client, 404, false);
+			return;
 		}
-
-		if (requestLine == null || !requestLine.startsWith("GET /callback")) {
-			this.writeResponse(client.getOutputStream(), 404, "Not Found");
+		if (requestLine.startsWith("GET /favicon.ico")) {
+			this.tryWriteResponse(client, 204, false);
+			return;
+		}
+		if (!requestLine.startsWith("GET /callback")) {
+			LOGGER.debug("Mod auth callback: ignored request {}", requestLine);
+			this.tryWriteResponse(client, 404, false);
 			return;
 		}
 
@@ -100,28 +110,48 @@ public final class ModAuthCallbackServer implements AutoCloseable {
 		String state = readQueryParam(query, "state");
 		String code = readQueryParam(query, "code");
 		if (state == null || code == null) {
-			this.writeResponse(client.getOutputStream(), 400, "Missing state or code");
+			LOGGER.warn("Mod auth callback: missing state or code in {}", requestLine);
+			this.tryWriteResponse(client, 400, false);
 			return;
 		}
 
+		LOGGER.info("Mod auth callback: received state={}", state);
 		if (!this.callbackFuture.isDone()) {
 			this.callbackFuture.complete(new CallbackPayload(state, code));
 		}
-		this.writeResponse(
-				client.getOutputStream(),
-				200,
-				"Авторизация завершена. Можно вернуться в Minecraft."
-		);
+		this.tryWriteResponse(client, 200, true);
 	}
 
-	private void writeResponse(OutputStream outputStream, int statusCode, String message) throws IOException {
-		String body = """
-				<!DOCTYPE html>
-				<html lang="ru"><head><meta charset="UTF-8"/><title>Redstone Master</title></head>
-				<body><p>%s</p></body></html>
-				""".formatted(message);
+	private String readRequestLine(Socket client) throws IOException {
+		BufferedReader reader = new BufferedReader(
+				new InputStreamReader(client.getInputStream(), StandardCharsets.US_ASCII));
+		String requestLine = reader.readLine();
+		while (true) {
+			String line = reader.readLine();
+			if (line == null || line.isEmpty()) {
+				break;
+			}
+		}
+		return requestLine;
+	}
+
+	private void tryWriteResponse(Socket client, int statusCode, boolean successPage) {
+		try {
+			this.writeResponse(client.getOutputStream(), statusCode, successPage);
+		} catch (IOException exception) {
+			LOGGER.debug("Mod auth callback: could not write HTTP {} response (client disconnected)", statusCode);
+		}
+	}
+
+	private void writeResponse(OutputStream outputStream, int statusCode, boolean successPage) throws IOException {
+		String body = successPage ? this.successHtml() : this.plainHtml("");
 		byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-		String status = statusCode == 200 ? "OK" : statusCode == 400 ? "Bad Request" : "Not Found";
+		String status = switch (statusCode) {
+			case 200 -> "OK";
+			case 204 -> "No Content";
+			case 400 -> "Bad Request";
+			default -> "Not Found";
+		};
 		String response = "HTTP/1.1 " + statusCode + " " + status + "\r\n"
 				+ "Content-Type: text/html; charset=utf-8\r\n"
 				+ "Content-Length: " + bytes.length + "\r\n"
@@ -130,6 +160,36 @@ public final class ModAuthCallbackServer implements AutoCloseable {
 		outputStream.write(response.getBytes(StandardCharsets.US_ASCII));
 		outputStream.write(bytes);
 		outputStream.flush();
+	}
+
+	private String successHtml() {
+		return """
+				<!DOCTYPE html>
+				<html lang="ru">
+				<head>
+				<meta charset="UTF-8"/>
+				<title>Redstone Master</title>
+				<style>
+				body { font-family: sans-serif; background: #1a1410; color: #f5f0e8; text-align: center; padding: 2rem; line-height: 1.5; }
+				</style>
+				</head>
+				<body>
+				<p>Авторизация завершена. Можете закрыть данную вкладку и вернуться в Minecraft.</p>
+				<p>Приятной игры!</p>
+				</body>
+				</html>
+				""";
+	}
+
+	private String plainHtml(String message) {
+		if (message == null || message.isBlank()) {
+			return "";
+		}
+		return """
+				<!DOCTYPE html>
+				<html lang="ru"><head><meta charset="UTF-8"/><title>Redstone Master</title></head>
+				<body><p>%s</p></body></html>
+				""".formatted(message);
 	}
 
 	private static String readQueryParam(String query, String name) {
