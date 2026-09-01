@@ -1,6 +1,5 @@
 package ru.redstonemaster.client.gui.tutorial;
 
-import java.util.Collections;
 import java.util.List;
 
 public record TutorialSection(
@@ -9,11 +8,15 @@ public record TutorialSection(
 		String summary,
 		String searchTokens,
 		String sources,
-		List<String> images,
+		List<TutorialImage> images,
 		List<TutorialLesson> lessons
 ) {
+	public List<TutorialImage> imageEntries() {
+		return this.images != null ? this.images : List.of();
+	}
+
 	public List<String> imagePaths() {
-		return this.images != null ? this.images : Collections.emptyList();
+		return this.imageEntries().stream().map(TutorialImage::path).toList();
 	}
 
 	public TutorialLesson findLesson(String lessonId) {

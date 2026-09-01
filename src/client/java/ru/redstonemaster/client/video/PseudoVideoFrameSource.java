@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
 
 /** Кадры псевдо-видео в JAR: {@code frame_00000.png}, {@code frame_00001.png}, … — читаются через {@link NativeImage}. */
 final class PseudoVideoFrameSource {
@@ -34,9 +35,21 @@ final class PseudoVideoFrameSource {
 	}
 
 	static Optional<PreparedFrames> prepare(String videoId, ResourceManager resourceManager) throws IOException {
+		PseudoVideoPrepareResult result = prepareResumable(videoId, resourceManager, () -> true);
+		return switch (result.status()) {
+			case COMPLETE -> result.frames();
+			case PAUSED, MISSING -> Optional.empty();
+		};
+	}
+
+	static PseudoVideoPrepareResult prepareResumable(
+			String videoId,
+			ResourceManager resourceManager,
+			BooleanSupplier continuePreparing
+	) throws IOException {
 		List<Identifier> pngFrames = listPngFrames(resourceManager, videoId);
 		if (pngFrames.isEmpty()) {
-			return Optional.empty();
+			return PseudoVideoPrepareResult.missing();
 		}
 
 		Path cacheDir = getCacheDirectory(videoId);
@@ -44,18 +57,36 @@ final class PseudoVideoFrameSource {
 
 		String sourceHash = computeSourceHash(resourceManager, pngFrames);
 		PseudoVideoManifest existing = readManifest(manifestPath);
-		if (existing != null && sourceHash.equals(existing.sourceHash()) && isCacheComplete(cacheDir, existing.frameCount())) {
-			return Optional.of(new PreparedFrames(cacheDir, existing));
+		if (existing != null
+				&& sourceHash.equals(existing.sourceHash())
+				&& existing.frameCount() == pngFrames.size()
+				&& isCacheComplete(cacheDir, existing.frameCount())) {
+			return PseudoVideoPrepareResult.complete(new PreparedFrames(cacheDir, existing));
 		}
 
-		if (Files.exists(cacheDir)) {
+		if (existing != null && !sourceHash.equals(existing.sourceHash())) {
 			deleteDirectory(cacheDir);
+			existing = null;
 		}
-		Files.createDirectories(cacheDir.resolve("frames"));
 
-		int width = 0;
-		int height = 0;
-		int fps = PseudoVideoConstants.FPS;
+		int width = existing != null ? existing.width() : 0;
+		int height = existing != null ? existing.height() : 0;
+		int fps = existing != null ? existing.fps() : PseudoVideoConstants.FPS;
+		int startIndex = countCompletedFrames(cacheDir);
+		if (existing != null && sourceHash.equals(existing.sourceHash())) {
+			startIndex = Math.max(startIndex, existing.frameCount());
+		}
+
+		if (startIndex >= pngFrames.size()) {
+			startIndex = 0;
+		}
+
+		if (startIndex == 0 && !Files.exists(cacheDir)) {
+			Files.createDirectories(cacheDir.resolve("frames"));
+		} else {
+			Files.createDirectories(cacheDir.resolve("frames"));
+		}
+
 		Identifier metaId = metaIdentifier(videoId);
 		if (resourceManager.getResource(metaId).isPresent()) {
 			Resource metaResource = resourceManager.getResourceOrThrow(metaId);
@@ -75,10 +106,17 @@ final class PseudoVideoFrameSource {
 			}
 		}
 
-		int index = 0;
-		for (Identifier frameId : pngFrames) {
+		for (int index = startIndex; index < pngFrames.size(); index++) {
+			if (!continuePreparing.getAsBoolean()) {
+				if (index > 0) {
+					PseudoVideoManifest partial = new PseudoVideoManifest(fps, index, width, height, sourceHash);
+					Files.writeString(manifestPath, GSON.toJson(partial));
+				}
+				return PseudoVideoPrepareResult.paused();
+			}
+
 			Path pngPath = framePngPath(cacheDir, index);
-			Resource resource = resourceManager.getResourceOrThrow(frameId);
+			Resource resource = resourceManager.getResourceOrThrow(pngFrames.get(index));
 			try (InputStream input = resource.open();
 				 NativeImage nativeImage = NativeImage.read(input)) {
 				if (width <= 0) {
@@ -89,12 +127,30 @@ final class PseudoVideoFrameSource {
 				}
 				nativeImage.writeToFile(pngPath);
 			}
-			index++;
 		}
 
-		PseudoVideoManifest manifest = new PseudoVideoManifest(fps, index, width, height, sourceHash);
+		PseudoVideoManifest manifest = new PseudoVideoManifest(fps, pngFrames.size(), width, height, sourceHash);
 		Files.writeString(manifestPath, GSON.toJson(manifest));
-		return Optional.of(new PreparedFrames(cacheDir, manifest));
+		return PseudoVideoPrepareResult.complete(new PreparedFrames(cacheDir, manifest));
+	}
+
+	static int countCompletedFrames(Path cacheDir) {
+		int count = 0;
+		while (true) {
+			Path png = framePngPath(cacheDir, count);
+			if (!Files.exists(png)) {
+				break;
+			}
+			try {
+				if (Files.size(png) < 32L) {
+					break;
+				}
+			} catch (IOException e) {
+				break;
+			}
+			count++;
+		}
+		return count;
 	}
 
 	static Path framePngPath(Path cacheDir, int frameIndex) {

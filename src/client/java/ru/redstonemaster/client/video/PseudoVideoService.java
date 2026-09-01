@@ -10,6 +10,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 public final class PseudoVideoService {
@@ -18,6 +23,11 @@ public final class PseudoVideoService {
 			"dynamic/pseudo_video_frame"
 	);
 	private static final PseudoVideoService INSTANCE = new PseudoVideoService();
+	private static final ExecutorService PREPARE_EXECUTOR = Executors.newSingleThreadExecutor(r -> {
+		Thread thread = new Thread(r, "redstone-master-pseudo-video");
+		thread.setDaemon(true);
+		return thread;
+	});
 
 	private String activeVideoId = "";
 	private PreparedVideo prepared;
@@ -29,6 +39,10 @@ public final class PseudoVideoService {
 	private volatile PrepareState prepareState = PrepareState.IDLE;
 	private volatile String prepareError = "";
 	private final AtomicReference<String> pendingVideoId = new AtomicReference<>("");
+	private final AtomicBoolean installPaused = new AtomicBoolean(false);
+	private final AtomicLong prepareGeneration = new AtomicLong(0);
+	private Runnable prepareStateListener = () -> {
+	};
 
 	private PseudoVideoService() {
 	}
@@ -37,22 +51,22 @@ public final class PseudoVideoService {
 		return INSTANCE;
 	}
 
+	public void setPrepareStateListener(Runnable listener) {
+		this.prepareStateListener = listener != null ? listener : () -> {
+		};
+	}
+
 	public void activate(String videoId) {
 		if (videoId == null || videoId.isBlank()) {
 			this.release();
 			return;
 		}
-		if (videoId.equals(this.activeVideoId) && this.prepared != null) {
+		if (videoId.equals(this.activeVideoId) && this.prepared != null && this.prepareState == PrepareState.READY) {
 			return;
 		}
-		this.releaseMemory();
-		this.activeVideoId = videoId;
-		this.frameIndex = 0;
-		this.playing = false;
-		this.frameAccumulator = 0f;
-		this.prepareState = PrepareState.LOADING;
-		this.prepareError = "";
-		this.pendingVideoId.set(videoId);
+		if (videoId.equals(this.activeVideoId) && this.prepareState == PrepareState.LOADING) {
+			return;
+		}
 
 		Minecraft client = Minecraft.getInstance();
 		if (client == null) {
@@ -61,22 +75,51 @@ public final class PseudoVideoService {
 			return;
 		}
 
-		// listResources и регистрация текстур — только на клиентском потоке.
-		client.execute(() -> {
-			String requestedId = videoId;
-			if (!requestedId.equals(this.pendingVideoId.get())) {
-				return;
-			}
-			try {
-				var result = PseudoVideoFrameSource.prepare(requestedId, client.getResourceManager());
-				this.applyPreparedFrames(requestedId, result);
-			} catch (IOException exception) {
-				if (requestedId.equals(this.pendingVideoId.get())) {
-					this.prepareState = PrepareState.FAILED;
-					this.prepareError = exception.getMessage() != null ? exception.getMessage() : "error";
-				}
-			}
-		});
+		if (!videoId.equals(this.activeVideoId)) {
+			this.cancelBackgroundPrepare();
+			this.releaseMemory();
+			this.activeVideoId = videoId;
+			this.frameIndex = 0;
+			this.playing = false;
+			this.frameAccumulator = 0f;
+			this.prepared = null;
+		}
+
+		this.prepareState = PrepareState.LOADING;
+		this.prepareError = "";
+		this.installPaused.set(false);
+		this.pendingVideoId.set(videoId);
+		this.startBackgroundPrepare(client, videoId);
+	}
+
+	public void pauseInstall() {
+		if (this.prepareState != PrepareState.LOADING && this.prepareState != PrepareState.PAUSED) {
+			return;
+		}
+		this.installPaused.set(true);
+		this.prepareGeneration.incrementAndGet();
+		this.prepareState = PrepareState.PAUSED;
+		this.notifyPrepareStateChanged();
+	}
+
+	public void resumeInstall() {
+		if (this.prepareState != PrepareState.PAUSED || this.activeVideoId.isBlank()) {
+			return;
+		}
+		Minecraft client = Minecraft.getInstance();
+		if (client == null) {
+			return;
+		}
+		this.installPaused.set(false);
+		this.prepareState = PrepareState.LOADING;
+		this.prepareError = "";
+		this.pendingVideoId.set(this.activeVideoId);
+		this.startBackgroundPrepare(client, this.activeVideoId);
+		this.notifyPrepareStateChanged();
+	}
+
+	public boolean isInstallPending() {
+		return this.prepareState == PrepareState.LOADING || this.prepareState == PrepareState.PAUSED;
 	}
 
 	public void tick(Minecraft client) {
@@ -179,6 +222,7 @@ public final class PseudoVideoService {
 	}
 
 	public void release() {
+		this.cancelBackgroundPrepare();
 		this.pendingVideoId.set("");
 		this.activeVideoId = "";
 		this.prepareState = PrepareState.IDLE;
@@ -221,6 +265,57 @@ public final class PseudoVideoService {
 		return manifest != null ? manifest.height() : 0;
 	}
 
+	private void startBackgroundPrepare(Minecraft client, String videoId) {
+		long generation = this.prepareGeneration.incrementAndGet();
+		PREPARE_EXECUTOR.execute(() -> {
+			try {
+				PseudoVideoPrepareResult result = PseudoVideoFrameSource.prepareResumable(
+						videoId,
+						client.getResourceManager(),
+						() -> !this.installPaused.get()
+								&& videoId.equals(this.pendingVideoId.get())
+								&& generation == this.prepareGeneration.get()
+				);
+				client.execute(() -> this.handlePrepareResult(videoId, generation, result));
+			} catch (IOException exception) {
+				client.execute(() -> {
+					if (videoId.equals(this.pendingVideoId.get()) && generation == this.prepareGeneration.get()) {
+						this.prepareState = PrepareState.FAILED;
+						this.prepareError = exception.getMessage() != null ? exception.getMessage() : "error";
+						this.notifyPrepareStateChanged();
+					}
+				});
+			}
+		});
+	}
+
+	private void handlePrepareResult(String videoId, long generation, PseudoVideoPrepareResult result) {
+		if (!videoId.equals(this.pendingVideoId.get()) || generation != this.prepareGeneration.get()) {
+			return;
+		}
+		switch (result.status()) {
+			case COMPLETE -> this.applyPreparedFrames(videoId, result.frames());
+			case PAUSED -> {
+				this.prepareState = PrepareState.PAUSED;
+				this.notifyPrepareStateChanged();
+			}
+			case MISSING -> {
+				this.prepareState = PrepareState.FAILED;
+				this.prepareError = "missing";
+				this.notifyPrepareStateChanged();
+			}
+		}
+	}
+
+	private void cancelBackgroundPrepare() {
+		this.installPaused.set(true);
+		this.prepareGeneration.incrementAndGet();
+	}
+
+	private void notifyPrepareStateChanged() {
+		this.prepareStateListener.run();
+	}
+
 	private void seekBy(int delta) {
 		if (this.prepared == null) {
 			return;
@@ -233,19 +328,21 @@ public final class PseudoVideoService {
 		this.showFrame(target);
 	}
 
-	private void applyPreparedFrames(String requestedId, java.util.Optional<PseudoVideoFrameSource.PreparedFrames> result) {
-		if (!requestedId.equals(this.pendingVideoId.get())) {
+	private void applyPreparedFrames(String videoId, Optional<PseudoVideoFrameSource.PreparedFrames> result) {
+		if (!videoId.equals(this.pendingVideoId.get())) {
 			return;
 		}
 		if (result.isEmpty()) {
 			this.prepareState = PrepareState.FAILED;
 			this.prepareError = "missing";
+			this.notifyPrepareStateChanged();
 			return;
 		}
 		PseudoVideoFrameSource.PreparedFrames frames = result.get();
-		this.prepared = new PreparedVideo(requestedId, frames);
+		this.prepared = new PreparedVideo(videoId, frames);
 		this.prepareState = PrepareState.READY;
 		this.showFrame(0);
+		this.notifyPrepareStateChanged();
 	}
 
 	private void showFrame(int index) {
@@ -271,6 +368,7 @@ public final class PseudoVideoService {
 		} catch (IOException e) {
 			this.prepareState = PrepareState.FAILED;
 			this.prepareError = "frame";
+			this.notifyPrepareStateChanged();
 		}
 	}
 
@@ -295,6 +393,7 @@ public final class PseudoVideoService {
 	public enum PrepareState {
 		IDLE,
 		LOADING,
+		PAUSED,
 		READY,
 		FAILED
 	}

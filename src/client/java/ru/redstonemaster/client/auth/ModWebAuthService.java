@@ -331,6 +331,18 @@ public final class ModWebAuthService {
 		return "ru_ru".equals(ModConfig.get().getEffectiveLanguageCode()) ? "ru" : "en";
 	}
 
+	public void openProfileInBrowser() {
+		try {
+			openBrowser(URI.create(
+					normalizeBaseUrl(ModConfig.get().webBaseUrl) + "/profile?lang=" + webLangCode()));
+		} catch (IOException exception) {
+			LOGGER.error("Failed to open profile page in browser", exception);
+			this.lastErrorKey = "gui.redstone-master.profile.auth.error.browser";
+			this.phase.set(AuthPhase.FAILED);
+			this.profileUiStale = true;
+		}
+	}
+
 	private record ExchangePayload(String state, String code) {
 	}
 

@@ -1,6 +1,7 @@
 package ru.redstonemaster.client.gui.tutorial;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
@@ -16,7 +17,9 @@ import java.util.List;
 import java.util.Locale;
 
 public final class TutorialCatalog {
-	private static final Gson GSON = new Gson();
+	private static final Gson GSON = new GsonBuilder()
+			.registerTypeAdapter(TutorialImage.class, new TutorialImageTypeAdapter())
+			.create();
 	private static final Type ROOT_TYPE = new TypeToken<TutorialCatalogFile>() {
 	}.getType();
 

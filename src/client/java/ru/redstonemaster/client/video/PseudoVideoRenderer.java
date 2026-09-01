@@ -151,7 +151,7 @@ public final class PseudoVideoRenderer {
 		if (state == PseudoVideoService.PrepareState.IDLE) {
 			return;
 		}
-		if (state == PseudoVideoService.PrepareState.LOADING) {
+		if (state == PseudoVideoService.PrepareState.LOADING || state == PseudoVideoService.PrepareState.PAUSED) {
 			drawStatus(
 					graphics,
 					font,

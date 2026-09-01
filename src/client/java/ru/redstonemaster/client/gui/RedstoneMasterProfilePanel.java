@@ -3,7 +3,6 @@ package ru.redstonemaster.client.gui;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import ru.redstonemaster.client.auth.ModWebAuthService;
 import ru.redstonemaster.client.gui.tutorial.TutorialLessonProgress;
@@ -32,10 +31,14 @@ final class RedstoneMasterProfilePanel {
 	private static final int ROLE_BADGE_BG = 0x997F1D1D;
 	private static final int ROLE_BADGE_BORDER = 0xFFB91C1C;
 	private static final int IMAGE_COLOR = 0xFFFFFFFF;
+	private static final int BUTTON_HORIZONTAL_PADDING = 12;
+	private static final int DETAIL_LABEL_VALUE_GAP = 8;
+	private static final int DETAIL_ROW_GAP = 4;
+	private static final String PLACEHOLDER = "—";
 	private static final DateTimeFormatter MEMBER_SINCE_FORMAT =
 			DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm").withZone(ZoneId.systemDefault());
 
-	private static final int LOGGED_IN_CARD_HEIGHT = 132;
+	private static final int PROFILE_CARD_HEIGHT = 100;
 
 	private final RedstoneMasterScreen screen;
 	private boolean showLoginSuccess;
@@ -54,39 +57,52 @@ final class RedstoneMasterProfilePanel {
 	}
 
 	void rebuildWidgets() {
-		int innerX = this.screen.getContentX() + RedstoneMasterScreen.CONTENT_INNER_PADDING;
-		int innerWidth = this.screen.getContentWidth() - RedstoneMasterScreen.CONTENT_INNER_PADDING * 2;
-		int buttonWidth = Math.min(180, innerWidth);
-		int buttonX = innerX + (innerWidth - buttonWidth) / 2;
-		int y = this.computeLogoutButtonY();
-
-		ModConfig config = ModConfig.get();
 		ModWebAuthService authService = ModWebAuthService.get();
-		if (config.profileLoggedIn) {
-			this.screen.addContentWidget(Button.builder(
-							ModContentLanguage.translatable("gui.redstone-master.profile.logout"),
-							button -> {
-								this.showLoginSuccess = false;
-								authService.logout();
-							})
-					.bounds(buttonX, y, buttonWidth, ROW_HEIGHT)
-					.build());
-			return;
-		}
 		if (authService.getPhase() == ModWebAuthService.AuthPhase.WAITING_BROWSER) {
 			return;
 		}
 
+		int innerX = this.screen.getContentX() + RedstoneMasterScreen.CONTENT_INNER_PADDING;
+		int innerWidth = this.screen.getContentWidth() - RedstoneMasterScreen.CONTENT_INNER_PADDING * 2;
+		int buttonY = this.computeButtonRowY();
+		boolean loggedIn = ModConfig.get().profileLoggedIn;
+
+		String leftLabelKey = loggedIn
+				? "gui.redstone-master.profile.open_on_website"
+				: "gui.redstone-master.profile.register";
+		String rightLabelKey = loggedIn
+				? "gui.redstone-master.profile.logout"
+				: "gui.redstone-master.profile.login";
+
+		int leftWidth = this.buttonWidthFor(leftLabelKey);
+		int rightWidth = this.buttonWidthFor(rightLabelKey);
+		int buttonWidth = Math.max(leftWidth, rightWidth);
+		int totalWidth = buttonWidth * 2;
+		int buttonX = innerX + innerWidth - totalWidth;
+
 		this.screen.addContentWidget(Button.builder(
-						ModContentLanguage.translatable("gui.redstone-master.profile.login"),
-						button -> authService.beginAuth("login"))
-				.bounds(buttonX, y, buttonWidth, ROW_HEIGHT)
+						ModContentLanguage.translatable(leftLabelKey),
+						button -> {
+							if (loggedIn) {
+								authService.openProfileInBrowser();
+							} else {
+								authService.beginAuth("register");
+							}
+						})
+				.bounds(buttonX, buttonY, buttonWidth, ROW_HEIGHT)
 				.build());
-		y += ROW_HEIGHT + ROW_GAP;
+
 		this.screen.addContentWidget(Button.builder(
-						ModContentLanguage.translatable("gui.redstone-master.profile.register"),
-						button -> authService.beginAuth("register"))
-				.bounds(buttonX, y, buttonWidth, ROW_HEIGHT)
+						ModContentLanguage.translatable(rightLabelKey),
+						button -> {
+							if (loggedIn) {
+								this.showLoginSuccess = false;
+								authService.logout();
+							} else {
+								authService.beginAuth("login");
+							}
+						})
+				.bounds(buttonX + buttonWidth, buttonY, buttonWidth, ROW_HEIGHT)
 				.build());
 	}
 
@@ -97,22 +113,6 @@ final class RedstoneMasterProfilePanel {
 		ModConfig config = ModConfig.get();
 		ModWebAuthService authService = ModWebAuthService.get();
 
-		if (config.profileLoggedIn) {
-			if (this.showLoginSuccess) {
-				graphics.drawString(
-						this.screen.getScreenFont(),
-						ModContentLanguage.get("gui.redstone-master.profile.login_success"),
-						textX,
-						textY,
-						SUCCESS_COLOR,
-						true
-				);
-				textY += this.screen.getFontLineHeight() + ROW_GAP;
-			}
-			this.renderLoggedInCard(graphics, textX, textY, textWidth, config);
-			return;
-		}
-
 		if (authService.getPhase() == ModWebAuthService.AuthPhase.WAITING_BROWSER) {
 			this.screen.renderTextContentAt(
 					graphics,
@@ -122,6 +122,18 @@ final class RedstoneMasterProfilePanel {
 					textWidth
 			);
 			return;
+		}
+
+		if (config.profileLoggedIn && this.showLoginSuccess) {
+			graphics.drawString(
+					this.screen.getScreenFont(),
+					ModContentLanguage.get("gui.redstone-master.profile.login_success"),
+					textX,
+					textY,
+					SUCCESS_COLOR,
+					true
+			);
+			textY += this.screen.getFontLineHeight() + ROW_GAP;
 		}
 
 		if (authService.getPhase() == ModWebAuthService.AuthPhase.FAILED) {
@@ -139,18 +151,18 @@ final class RedstoneMasterProfilePanel {
 			textY += this.screen.getFontLineHeight() + ROW_GAP;
 		}
 
-		this.screen.renderTextContentAt(
-				graphics,
-				ModContentLanguage.translatable("gui.redstone-master.profile.guest_hint"),
-				textX,
-				textY,
-				textWidth
-		);
+		this.renderProfileCard(graphics, textX, textY, textWidth, config.profileLoggedIn, config);
 	}
 
-	private int renderLoggedInCard(GuiGraphics graphics, int x, int y, int width, ModConfig config) {
-		int cardHeight = LOGGED_IN_CARD_HEIGHT;
-		this.drawCard(graphics, x, y, width, cardHeight);
+	private void renderProfileCard(
+			GuiGraphics graphics,
+			int x,
+			int y,
+			int width,
+			boolean loggedIn,
+			ModConfig config
+	) {
+		this.drawCard(graphics, x, y, width, PROFILE_CARD_HEIGHT);
 
 		int sidebarX = x + CARD_PADDING;
 		int sidebarCenterX = sidebarX + SIDEBAR_WIDTH / 2;
@@ -160,8 +172,10 @@ final class RedstoneMasterProfilePanel {
 		int avatarY = sidebarY;
 		this.renderAvatar(graphics, avatarX, avatarY);
 
+		String username = loggedIn && !config.profileUsername.isBlank()
+				? config.profileUsername
+				: PLACEHOLDER;
 		int usernameY = avatarY + AVATAR_DISPLAY_SIZE + 6;
-		String username = config.profileUsername;
 		int usernameWidth = this.screen.getScreenFont().width(username);
 		graphics.drawString(
 				this.screen.getScreenFont(),
@@ -172,7 +186,7 @@ final class RedstoneMasterProfilePanel {
 				true
 		);
 
-		String roleLabel = this.localizedRoleText(config.profileRole);
+		String roleLabel = loggedIn ? this.localizedRoleText(config.profileRole) : PLACEHOLDER;
 		int badgeWidth = this.screen.getScreenFont().width(roleLabel) + 10;
 		int badgeHeight = this.screen.getScreenFont().lineHeight + 4;
 		int badgeX = sidebarCenterX - badgeWidth / 2;
@@ -189,7 +203,6 @@ final class RedstoneMasterProfilePanel {
 		);
 
 		int detailsX = x + SIDEBAR_WIDTH + CARD_GAP + CARD_PADDING;
-		int detailsWidth = width - SIDEBAR_WIDTH - CARD_GAP - CARD_PADDING * 2;
 		int detailsY = y + CARD_PADDING;
 		graphics.drawString(
 				this.screen.getScreenFont(),
@@ -201,48 +214,38 @@ final class RedstoneMasterProfilePanel {
 		);
 		detailsY += this.screen.getFontLineHeight() + 6;
 
-		detailsY = this.renderDetailRow(
-				graphics,
-				detailsX,
-				detailsY,
-				detailsWidth,
-				ModContentLanguage.get("gui.redstone-master.profile.label.email"),
-				config.profileEmail.isBlank() ? "—" : config.profileEmail
-		);
-		detailsY = this.renderDetailRow(
-				graphics,
-				detailsX,
-				detailsY,
-				detailsWidth,
-				ModContentLanguage.get("gui.redstone-master.profile.label.role"),
-				roleLabel
-		);
-		detailsY = this.renderDetailRow(
-				graphics,
-				detailsX,
-				detailsY,
-				detailsWidth,
-				ModContentLanguage.get("gui.redstone-master.profile.label.member_since"),
-				this.formatMemberSince(config.profileCreatedAt)
-		);
-		this.renderDetailRow(
-				graphics,
-				detailsX,
-				detailsY,
-				detailsWidth,
-				ModContentLanguage.get("gui.redstone-master.profile.label.lessons"),
-				TutorialLessonProgress.countCompletedTotal() + " / " + TutorialLessonProgress.countLessonsTotal()
-		);
+		String email = loggedIn && !config.profileEmail.isBlank() ? config.profileEmail : PLACEHOLDER;
+		String memberSince = loggedIn ? this.formatMemberSince(config.profileCreatedAt) : PLACEHOLDER;
+		String lessons = loggedIn
+				? TutorialLessonProgress.countCompletedTotal() + " / " + TutorialLessonProgress.countLessonsTotal()
+				: PLACEHOLDER;
 
-		return y + cardHeight;
+		this.renderDetailFieldsColumn(
+				graphics,
+				detailsX,
+				detailsY,
+				new DetailField(ModContentLanguage.get("gui.redstone-master.profile.label.email"), email),
+				new DetailField(ModContentLanguage.get("gui.redstone-master.profile.label.role"), roleLabel),
+				new DetailField(ModContentLanguage.get("gui.redstone-master.profile.label.member_since"), memberSince),
+				new DetailField(ModContentLanguage.get("gui.redstone-master.profile.label.lessons"), lessons)
+		);
 	}
 
-	private int computeLogoutButtonY() {
+	private int computeButtonRowY() {
 		int y = this.screen.getContentY() + RedstoneMasterScreen.CONTENT_INNER_PADDING;
-		if (this.showLoginSuccess && ModConfig.get().profileLoggedIn) {
+		ModWebAuthService authService = ModWebAuthService.get();
+		if (ModConfig.get().profileLoggedIn && this.showLoginSuccess) {
 			y += this.screen.getFontLineHeight() + ROW_GAP;
 		}
-		return y + LOGGED_IN_CARD_HEIGHT + ROW_GAP;
+		if (authService.getPhase() == ModWebAuthService.AuthPhase.FAILED) {
+			y += this.screen.getFontLineHeight() + ROW_GAP;
+		}
+		return y + PROFILE_CARD_HEIGHT + ROW_GAP;
+	}
+
+	private int buttonWidthFor(String labelKey) {
+		int textWidth = this.screen.getScreenFont().width(ModContentLanguage.get(labelKey));
+		return textWidth + BUTTON_HORIZONTAL_PADDING * 2;
 	}
 
 	private void drawCard(GuiGraphics graphics, int x, int y, int width, int height) {
@@ -277,19 +280,33 @@ final class RedstoneMasterProfilePanel {
 		);
 	}
 
-	private int renderDetailRow(GuiGraphics graphics, int x, int y, int width, String label, String value) {
-		graphics.drawString(this.screen.getScreenFont(), label, x, y, LABEL_COLOR, true);
-		y += this.screen.getFontLineHeight() + 2;
-		for (var line : this.screen.getScreenFont().split(Component.literal(value), width)) {
-			graphics.drawString(this.screen.getScreenFont(), line, x, y, VALUE_COLOR, true);
-			y += this.screen.getFontLineHeight();
+	private record DetailField(String label, String value) {
+	}
+
+	private void renderDetailFieldsColumn(
+			GuiGraphics graphics,
+			int x,
+			int y,
+			DetailField... fields
+	) {
+		var font = this.screen.getScreenFont();
+		int labelColumnWidth = 0;
+		for (DetailField field : fields) {
+			labelColumnWidth = Math.max(labelColumnWidth, font.width(field.label));
 		}
-		return y + 4;
+		int valueX = x + labelColumnWidth + DETAIL_LABEL_VALUE_GAP;
+		int rowY = y;
+		int lineHeight = this.screen.getFontLineHeight();
+		for (DetailField field : fields) {
+			graphics.drawString(font, field.label, x, rowY, LABEL_COLOR, true);
+			graphics.drawString(font, field.value, valueX, rowY, VALUE_COLOR, true);
+			rowY += lineHeight + DETAIL_ROW_GAP;
+		}
 	}
 
 	private String localizedRoleText(String role) {
 		if (role == null || role.isBlank()) {
-			return "—";
+			return PLACEHOLDER;
 		}
 		return switch (role.toUpperCase()) {
 			case "MODERATOR" -> ModContentLanguage.get("gui.redstone-master.profile.role.moderator");
@@ -300,7 +317,7 @@ final class RedstoneMasterProfilePanel {
 
 	private String formatMemberSince(String createdAt) {
 		if (createdAt == null || createdAt.isBlank()) {
-			return "—";
+			return PLACEHOLDER;
 		}
 		try {
 			return MEMBER_SINCE_FORMAT.format(Instant.parse(createdAt));
