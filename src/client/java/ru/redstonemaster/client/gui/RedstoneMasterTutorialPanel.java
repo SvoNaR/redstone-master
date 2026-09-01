@@ -1,5 +1,6 @@
 package ru.redstonemaster.client.gui;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -10,8 +11,12 @@ import ru.redstonemaster.client.gui.tutorial.TutorialLesson;
 import ru.redstonemaster.client.gui.tutorial.TutorialLessonProgress;
 import ru.redstonemaster.client.gui.tutorial.TutorialSection;
 import ru.redstonemaster.client.gui.tutorial.TutorialStudyTarget;
+import ru.redstonemaster.client.comments.ModCommentAvatarCache;
+import ru.redstonemaster.client.comments.ModLessonComment;
+import ru.redstonemaster.client.comments.ModLessonCommentsService;
 import ru.redstonemaster.client.gui.tutorial.TutorialTextures;
 import ru.redstonemaster.client.video.PseudoVideoLayout;
+import net.minecraft.client.renderer.RenderPipelines;
 import ru.redstonemaster.client.video.PseudoVideoRenderer;
 import ru.redstonemaster.client.video.PseudoVideoSeekSlider;
 import ru.redstonemaster.client.video.PseudoVideoService;
@@ -54,6 +59,11 @@ final class RedstoneMasterTutorialPanel {
 	private static final int VIDEO_PLAY_BUTTON_WIDTH = 28;
 	private static final int VIDEO_FULLSCREEN_BUTTON_WIDTH = 28;
 	private static final int COLLAPSE_ALL_GAP = 6;
+	private static final int COMMENT_AVATAR_SIZE = 8;
+	private static final int COMMENT_AVATAR_GAP = 4;
+	private static final int COMMENT_BLOCK_GAP = 8;
+	private static final int COMMENT_SECTION_GAP = 12;
+	private static final int COMMENT_BUTTON_HEIGHT = 20;
 
 	private static final int SECTION_COLOR = 0xFFE8C070;
 	private static final int SECTION_TITLE_DOWN_OFFSET = 2;
@@ -88,6 +98,11 @@ final class RedstoneMasterTutorialPanel {
 	private PseudoVideoSeekSlider videoSeekSlider;
 	private String activeStudyVideoId = "";
 	private boolean videoFullscreen;
+	private Button studyCommentsButton;
+	private boolean studyCommentsExpanded;
+	private boolean studyCommentsLoading;
+	private boolean studyCommentsLoadFailed;
+	private List<ModLessonComment> studyComments = List.of();
 
 	RedstoneMasterTutorialPanel(RedstoneMasterScreen screen) {
 		this.screen = screen;
@@ -153,6 +168,7 @@ final class RedstoneMasterTutorialPanel {
 		this.videoSeekForwardButton = null;
 		this.videoFullscreenButton = null;
 		this.videoSeekSlider = null;
+		this.studyCommentsButton = null;
 		this.layoutRows.clear();
 		this.studyButtons.clear();
 		this.sectionToggleButtons.clear();
@@ -168,6 +184,7 @@ final class RedstoneMasterTutorialPanel {
 		this.videoSeekForwardButton = null;
 		this.videoFullscreenButton = null;
 		this.videoSeekSlider = null;
+		this.studyCommentsButton = null;
 
 		int innerX = this.screen.getContentX() + RedstoneMasterScreen.CONTENT_INNER_PADDING;
 		int innerWidth = this.screen.getContentWidth() - RedstoneMasterScreen.CONTENT_INNER_PADDING * 2;
@@ -237,6 +254,17 @@ final class RedstoneMasterTutorialPanel {
 			this.screen.addContentWidget(this.videoSeekSlider);
 			this.setVideoControlsVisible(false);
 			this.layoutStudyVideoControls();
+		}
+
+		if (this.canShowLessonComments()) {
+			int buttonWidth = this.getStudyCommentsButtonWidth();
+			this.studyCommentsButton = Button.builder(
+							ModContentLanguage.translatable("gui.redstone-master.tutorial.comments.show"),
+							button -> this.toggleStudyComments())
+					.bounds(innerX, 0, buttonWidth, COMMENT_BUTTON_HEIGHT)
+					.build();
+			this.screen.addContentWidget(this.studyCommentsButton);
+			this.layoutStudyCommentsButton();
 		}
 
 		this.clampScrollOffset();
@@ -630,6 +658,7 @@ final class RedstoneMasterTutorialPanel {
 		if (ModConfig.get().rememberSession) {
 			this.savedListScrollOffset = this.scrollOffset;
 		}
+		this.resetStudyCommentsState();
 		this.studyTarget = target;
 		this.scrollOffset = 0;
 		this.screen.rebuildTutorialWidgets();
@@ -643,6 +672,7 @@ final class RedstoneMasterTutorialPanel {
 		this.exitVideoFullscreen();
 		PseudoVideoService.get().release();
 		this.activeStudyVideoId = "";
+		this.resetStudyCommentsState();
 		this.studyTarget = null;
 		if (ModConfig.get().rememberSession) {
 			this.scrollOffset = this.savedListScrollOffset;
@@ -875,6 +905,8 @@ final class RedstoneMasterTutorialPanel {
 				y += this.screen.getFont().lineHeight;
 			}
 		}
+
+		y += this.renderStudyCommentsSection(graphics, textX, textWidth, y, listTop, contentBottom);
 	}
 
 	private StudyContent resolveStudyContent() {
@@ -1022,12 +1054,39 @@ final class RedstoneMasterTutorialPanel {
 
 	void layoutStudyVideoControls() {
 		if (!this.isStudying() || !this.hasActiveStudyVideo()) {
+			this.layoutStudyCommentsButton();
 			return;
 		}
 		int innerX = this.screen.getContentX() + RedstoneMasterScreen.CONTENT_INNER_PADDING;
 		int innerWidth = this.screen.getContentWidth() - RedstoneMasterScreen.CONTENT_INNER_PADDING * 2;
 		int textWidth = innerWidth - 4;
 		this.layoutStudyVideoControls(innerX, textWidth, this.getListTop(), this.getScrollableContentBottom());
+		this.layoutStudyCommentsButton();
+	}
+
+	void layoutStudyCommentsButton() {
+		if (this.studyCommentsButton == null || !this.canShowLessonComments()) {
+			return;
+		}
+		StudyContent content = this.resolveStudyContent();
+		if (content == null) {
+			return;
+		}
+		int innerX = this.screen.getContentX() + RedstoneMasterScreen.CONTENT_INNER_PADDING;
+		int innerWidth = this.screen.getContentWidth() - RedstoneMasterScreen.CONTENT_INNER_PADDING * 2;
+		int textWidth = innerWidth - 4;
+		int buttonY = this.getListTop() - this.scrollOffset
+				+ this.measureStudyContentHeight(content, textWidth)
+				+ COMMENT_SECTION_GAP;
+		int listTop = this.getListTop();
+		int contentBottom = this.getScrollableContentBottom();
+		this.studyCommentsButton.setX(innerX + 2);
+		this.studyCommentsButton.setY(buttonY);
+		this.studyCommentsButton.setWidth(this.getStudyCommentsButtonWidth());
+		this.studyCommentsButton.setHeight(COMMENT_BUTTON_HEIGHT);
+		boolean visible = buttonY + COMMENT_BUTTON_HEIGHT >= listTop && buttonY <= contentBottom;
+		this.studyCommentsButton.visible = visible;
+		this.studyCommentsButton.active = !this.studyCommentsLoading;
 	}
 
 	private void layoutStudyVideoControls(int innerX, int textWidth, int listTop, int contentBottom) {
@@ -1141,45 +1200,9 @@ final class RedstoneMasterTutorialPanel {
 	}
 
 	private int measureStudyHeight(StudyContent content, int innerWidth) {
-		int height = 0;
-		height += this.screen.getFont().split(Component.literal(content.title()), innerWidth).size()
-				* this.screen.getFont().lineHeight + 4;
-		boolean hasVideo = !content.videos().isEmpty();
-		StudyBodyParts bodyParts = hasVideo ? this.splitStudyBodyForVideo(content.body()) : new StudyBodyParts("", content.body());
-		String bodyAfterVideo = hasVideo ? bodyParts.remainingBody() : content.body();
-		if (hasVideo) {
-			if (this.hasStudyGoalBeforeVideo(content.body(), bodyParts)) {
-				height += this.measureStudyGoalBeforeVideoHeight(bodyParts.goalParagraph(), innerWidth);
-			} else {
-				height += VIDEO_GAP;
-			}
-			height += PseudoVideoLayout.embedded(
-					0,
-					0,
-					innerWidth,
-					VIDEO_CONTROLS_HEIGHT,
-					this.getVideoControlsInnerWidth(),
-					this.getVideoTimeBlockWidth(),
-					VIDEO_FULLSCREEN_BUTTON_WIDTH,
-					this.getVideoSeekBackWidth(),
-					VIDEO_PLAY_BUTTON_WIDTH,
-					this.getVideoSeekForwardWidth(),
-					this.screen.getFont()
-			).totalHeight();
-			height += VIDEO_AFTER_CONTROLS_GAP;
-		}
-		if (!bodyAfterVideo.isBlank()) {
-			height += this.screen.getFont().split(Component.literal(bodyAfterVideo), innerWidth).size()
-					* this.screen.getFont().lineHeight;
-		}
-		height += IMAGE_GAP;
-		height += TutorialTextures.measureImagesHeight(content.images(), innerWidth, IMAGE_GAP);
-		height += 4;
-		if (content.sources() != null && !content.sources().isBlank()) {
-			height += this.screen.getFont().split(Component.literal(content.sources()), innerWidth).size()
-					* this.screen.getFont().lineHeight;
-		}
-		return height + 16;
+		return this.measureStudyContentHeight(content, innerWidth)
+				+ this.measureStudyCommentsBlockHeight(innerWidth)
+				+ 16;
 	}
 
 	private int getListContentHeight() {
@@ -1240,6 +1263,221 @@ final class RedstoneMasterTutorialPanel {
 	private void clampScrollOffset() {
 		this.scrollOffset = (int) Math.clamp(this.scrollOffset, 0, this.getMaxScroll());
 		this.updateLessonCompletionFromScroll();
+	}
+
+	private boolean canShowLessonComments() {
+		return this.studyTarget instanceof TutorialStudyTarget.LessonTarget
+				&& ModLessonCommentsService.get().isWebsiteReachable();
+	}
+
+	private void resetStudyCommentsState() {
+		this.studyCommentsExpanded = false;
+		this.studyCommentsLoading = false;
+		this.studyCommentsLoadFailed = false;
+		this.studyComments = List.of();
+	}
+
+	private void toggleStudyComments() {
+		if (this.studyCommentsExpanded) {
+			this.studyCommentsExpanded = false;
+			this.screen.rebuildTutorialWidgets();
+			return;
+		}
+		if (!(this.studyTarget instanceof TutorialStudyTarget.LessonTarget lessonTarget)) {
+			return;
+		}
+		this.studyCommentsLoading = true;
+		this.studyCommentsLoadFailed = false;
+		this.studyCommentsExpanded = true;
+		ModLessonCommentsService.get().fetchComments(
+				lessonTarget.sectionId(),
+				lessonTarget.lessonId(),
+				comments -> Minecraft.getInstance().execute(() -> {
+					this.studyComments = comments;
+					this.studyCommentsLoading = false;
+					this.studyCommentsLoadFailed = false;
+					this.screen.rebuildTutorialWidgets();
+				}),
+				() -> Minecraft.getInstance().execute(() -> {
+					this.studyComments = List.of();
+					this.studyCommentsLoading = false;
+					this.studyCommentsLoadFailed = true;
+					this.screen.rebuildTutorialWidgets();
+				})
+		);
+	}
+
+	private int getStudyCommentsButtonWidth() {
+		return this.screen.getFont().width(ModContentLanguage.get("gui.redstone-master.tutorial.comments.show"))
+				+ STUDY_BUTTON_PADDING;
+	}
+
+	private int measureStudyContentHeight(StudyContent content, int innerWidth) {
+		int height = 0;
+		height += this.screen.getFont().split(Component.literal(content.title()), innerWidth).size()
+				* this.screen.getFont().lineHeight + 4;
+		boolean hasVideo = !content.videos().isEmpty();
+		StudyBodyParts bodyParts = hasVideo ? this.splitStudyBodyForVideo(content.body()) : new StudyBodyParts("", content.body());
+		String bodyAfterVideo = hasVideo ? bodyParts.remainingBody() : content.body();
+		if (hasVideo) {
+			if (this.hasStudyGoalBeforeVideo(content.body(), bodyParts)) {
+				height += this.measureStudyGoalBeforeVideoHeight(bodyParts.goalParagraph(), innerWidth);
+			} else {
+				height += VIDEO_GAP;
+			}
+			height += PseudoVideoLayout.embedded(
+					0,
+					0,
+					innerWidth,
+					VIDEO_CONTROLS_HEIGHT,
+					this.getVideoControlsInnerWidth(),
+					this.getVideoTimeBlockWidth(),
+					VIDEO_FULLSCREEN_BUTTON_WIDTH,
+					this.getVideoSeekBackWidth(),
+					VIDEO_PLAY_BUTTON_WIDTH,
+					this.getVideoSeekForwardWidth(),
+					this.screen.getFont()
+			).totalHeight();
+			height += VIDEO_AFTER_CONTROLS_GAP;
+		}
+		if (!bodyAfterVideo.isBlank()) {
+			height += this.screen.getFont().split(Component.literal(bodyAfterVideo), innerWidth).size()
+					* this.screen.getFont().lineHeight;
+		}
+		height += IMAGE_GAP;
+		height += TutorialTextures.measureImagesHeight(content.images(), innerWidth, IMAGE_GAP);
+		height += 4;
+		if (content.sources() != null && !content.sources().isBlank()) {
+			height += this.screen.getFont().split(Component.literal(content.sources()), innerWidth).size()
+					* this.screen.getFont().lineHeight;
+		}
+		return height;
+	}
+
+	private int measureStudyCommentsBlockHeight(int innerWidth) {
+		if (!this.canShowLessonComments()) {
+			return 0;
+		}
+		int height = COMMENT_SECTION_GAP + COMMENT_BUTTON_HEIGHT;
+		if (!this.studyCommentsExpanded) {
+			return height;
+		}
+		height += COMMENT_SECTION_GAP;
+		if (this.studyCommentsLoading || this.studyCommentsLoadFailed) {
+			height += this.screen.getFont().lineHeight;
+			return height;
+		}
+		if (this.studyComments.isEmpty()) {
+			height += this.screen.getFont().lineHeight;
+			return height;
+		}
+		for (ModLessonComment comment : this.studyComments) {
+			height += this.measureSingleCommentHeight(comment, innerWidth) + COMMENT_BLOCK_GAP;
+		}
+		return height;
+	}
+
+	private int measureSingleCommentHeight(ModLessonComment comment, int textWidth) {
+		int headerHeight = Math.max(COMMENT_AVATAR_SIZE, this.screen.getFont().lineHeight);
+		int bodyWidth = textWidth;
+		int bodyLines = this.screen.getFont().split(Component.literal(comment.body()), bodyWidth).size();
+		return headerHeight + 2 + bodyLines * this.screen.getFont().lineHeight;
+	}
+
+	private int renderStudyCommentsSection(
+			GuiGraphics graphics,
+			int textX,
+			int textWidth,
+			int y,
+			int listTop,
+			int contentBottom
+	) {
+		if (!this.canShowLessonComments()) {
+			return 0;
+		}
+		int startY = y;
+		y += COMMENT_SECTION_GAP + COMMENT_BUTTON_HEIGHT;
+		if (!this.studyCommentsExpanded) {
+			return y - startY;
+		}
+		y += COMMENT_SECTION_GAP;
+		Component statusLine;
+		if (this.studyCommentsLoading) {
+			statusLine = ModContentLanguage.translatable("gui.redstone-master.tutorial.comments.loading");
+		} else if (this.studyCommentsLoadFailed) {
+			statusLine = ModContentLanguage.translatable("gui.redstone-master.tutorial.comments.error");
+		} else if (this.studyComments.isEmpty()) {
+			statusLine = ModContentLanguage.translatable("gui.redstone-master.tutorial.comments.empty");
+		} else {
+			for (ModLessonComment comment : this.studyComments) {
+				y = this.renderSingleComment(graphics, textX, textWidth, y, listTop, contentBottom, comment);
+				y += COMMENT_BLOCK_GAP;
+			}
+			return y - startY;
+		}
+		if (y + this.screen.getFont().lineHeight >= listTop && y <= contentBottom) {
+			graphics.drawString(this.screen.getFont(), statusLine, textX, y, DISCLAIMER_COLOR, true);
+		}
+		y += this.screen.getFont().lineHeight;
+		return y - startY;
+	}
+
+	private int renderSingleComment(
+			GuiGraphics graphics,
+			int textX,
+			int textWidth,
+			int y,
+			int listTop,
+			int contentBottom,
+			ModLessonComment comment
+	) {
+		if (y > contentBottom) {
+			return y;
+		}
+		ModCommentAvatarCache.AvatarDraw avatar = ModCommentAvatarCache.get(comment.id(), comment.avatarUrl());
+		if (y + COMMENT_AVATAR_SIZE >= listTop && y <= contentBottom) {
+			graphics.blit(
+					RenderPipelines.GUI_TEXTURED,
+					avatar.textureId(),
+					textX,
+					y,
+					0.0f,
+					0.0f,
+					COMMENT_AVATAR_SIZE,
+					COMMENT_AVATAR_SIZE,
+					avatar.width(),
+					avatar.height(),
+					avatar.width(),
+					avatar.height(),
+					0xFFFFFFFF
+			);
+		}
+		int nameX = textX + COMMENT_AVATAR_SIZE + COMMENT_AVATAR_GAP;
+		String header = comment.username();
+		if (comment.replyToUsername() != null && !comment.replyToUsername().isBlank()) {
+			header += " (" + ModContentLanguage.format(
+					"gui.redstone-master.tutorial.comments.reply_prefix",
+					comment.replyToUsername()
+			) + ")";
+		}
+		if (y + this.screen.getFont().lineHeight >= listTop && y <= contentBottom) {
+			graphics.drawString(
+					this.screen.getFont(),
+					Component.literal(header).withStyle(net.minecraft.ChatFormatting.GOLD),
+					nameX,
+					y,
+					LESSON_COLOR,
+					true
+			);
+		}
+		int bodyY = y + this.screen.getFont().lineHeight + 2;
+		for (var line : this.screen.getFont().split(Component.literal(comment.body()), textWidth)) {
+			if (bodyY + this.screen.getFont().lineHeight >= listTop && bodyY <= contentBottom) {
+				graphics.drawString(this.screen.getFont(), line, textX, bodyY, TEXT_COLOR, true);
+			}
+			bodyY += this.screen.getFont().lineHeight;
+		}
+		return bodyY;
 	}
 
 	private record StudyContent(String title, String body, String sources, List<String> images, List<String> videos) {
