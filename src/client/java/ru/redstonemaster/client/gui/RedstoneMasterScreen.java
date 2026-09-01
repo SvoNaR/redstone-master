@@ -1,5 +1,6 @@
 package ru.redstonemaster.client.gui;
 
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.GuiGraphics;
 import ru.redstonemaster.RedstoneMasterClient;
@@ -15,6 +16,7 @@ import net.minecraft.network.chat.TextColor;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
 import ru.redstonemaster.client.auth.ModWebAuthService;
+import org.lwjgl.glfw.GLFW;
 import ru.redstonemaster.client.profile.ModAvatarManager;
 import ru.redstonemaster.client.gui.tutorial.TutorialSessionPersistence;
 import ru.redstonemaster.client.gui.tutorial.TutorialStudyTarget;
@@ -387,6 +389,16 @@ public class RedstoneMasterScreen extends Screen {
 	}
 
 	@Override
+	public boolean keyPressed(KeyEvent event) {
+		if (this.currentTab == RedstoneMasterTab.TUTORIAL
+				&& event.key() == GLFW.GLFW_KEY_ESCAPE
+				&& this.tutorialPanel.handleVideoFullscreenEscape()) {
+			return true;
+		}
+		return super.keyPressed(event);
+	}
+
+	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubled) {
 		if (RedstoneMasterClient.navigateBackKey.matchesMouse(event)) {
 			this.navigateBack();
@@ -412,6 +424,12 @@ public class RedstoneMasterScreen extends Screen {
 
 	@Override
 	public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
+		if (this.currentTab == RedstoneMasterTab.TUTORIAL && this.tutorialPanel.isVideoFullscreen()) {
+			if (this.shouldShowTitleMenuPanorama()) {
+				this.renderPanorama(graphics, delta);
+			}
+			return;
+		}
 		if (this.shouldShowTitleMenuPanorama()) {
 			this.renderPanorama(graphics, delta);
 		}
@@ -452,10 +470,23 @@ public class RedstoneMasterScreen extends Screen {
 
 	@Override
 	public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
+		if (this.currentTab == RedstoneMasterTab.TUTORIAL && this.tutorialPanel.isVideoFullscreen()) {
+			this.tutorialPanel.layoutStudyVideoControls();
+			this.renderBackground(graphics, mouseX, mouseY, delta);
+			this.tutorialPanel.renderVideoFullscreenOverlay(graphics);
+			for (var child : this.children()) {
+				if (child instanceof net.minecraft.client.gui.components.AbstractWidget widget && !widget.visible) {
+					continue;
+				}
+				if (child instanceof net.minecraft.client.gui.components.Renderable renderable) {
+					renderable.render(graphics, mouseX, mouseY, delta);
+				}
+			}
+			return;
+		}
 		if (this.currentTab == RedstoneMasterTab.TUTORIAL) {
 			this.tutorialPanel.layoutStudyVideoControls();
 		}
-		super.render(graphics, mouseX, mouseY, delta);
 		this.renderProfileTabAvatar(graphics);
 		this.renderDecorations(graphics);
 		this.renderContent(graphics);
@@ -464,10 +495,12 @@ public class RedstoneMasterScreen extends Screen {
 		}
 		if (this.currentTab == RedstoneMasterTab.TUTORIAL) {
 			this.tutorialPanel.render(graphics);
+			this.tutorialPanel.renderVideoFullscreenOverlay(graphics);
 		}
 		if (this.currentTab == RedstoneMasterTab.PROFILE) {
 			this.profilePanel.render(graphics);
 		}
+		super.render(graphics, mouseX, mouseY, delta);
 	}
 
 	private int getLineColor() {
@@ -774,5 +807,37 @@ public class RedstoneMasterScreen extends Screen {
 			T widget
 	) {
 		return this.addRenderableWidget(widget);
+	}
+
+	int getScreenWidth() {
+		return this.width;
+	}
+
+	int getScreenHeight() {
+		return this.height;
+	}
+
+	void applyTutorialVideoFullscreenChrome(boolean active) {
+		for (var child : this.children()) {
+			if (this.tutorialPanel.isVideoControlWidget(child)) {
+				continue;
+			}
+			if (child instanceof net.minecraft.client.gui.components.AbstractWidget widget) {
+				widget.visible = !active;
+			}
+		}
+		if (active) {
+			this.tutorialPanel.applyStudyChromeVisible(false);
+			return;
+		}
+		for (var child : this.children()) {
+			if (this.tutorialPanel.isVideoControlWidget(child)) {
+				continue;
+			}
+			if (child instanceof net.minecraft.client.gui.components.AbstractWidget widget) {
+				widget.visible = true;
+			}
+		}
+		this.tutorialPanel.restoreAfterVideoFullscreen();
 	}
 }

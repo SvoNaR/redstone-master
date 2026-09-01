@@ -11,6 +11,8 @@ import ru.redstonemaster.client.gui.settings.ModSettingDefaults;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 public class ModConfig {
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -31,6 +33,7 @@ public class ModConfig {
 	public boolean profileLoggedIn = false;
 	public String profileUsername = "";
 	public String profileAvatarUrl = "";
+	public List<String> completedTutorialLessons = new ArrayList<>();
 
 	public static ModConfig get() {
 		if (instance == null) {
@@ -49,6 +52,9 @@ public class ModConfig {
 					instance = new ModConfig();
 				}
 				instance.clampPanelScale();
+				if (instance.completedTutorialLessons == null) {
+					instance.completedTutorialLessons = new ArrayList<>();
+				}
 			} catch (IOException | com.google.gson.JsonSyntaxException e) {
 				instance = new ModConfig();
 			}

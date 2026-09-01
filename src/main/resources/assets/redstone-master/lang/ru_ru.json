@@ -27,6 +27,8 @@
 	"gui.redstone-master.tutorial.video.pause": "⏸",
 	"gui.redstone-master.tutorial.video.seek_back": "<< -5 сек",
 	"gui.redstone-master.tutorial.video.seek_forward": "+5 сек >>",
+	"gui.redstone-master.tutorial.video.fullscreen": "⛶",
+	"gui.redstone-master.tutorial.video.exit_fullscreen": "⛶",
 	"gui.redstone-master.tutorial.video.loading": "Подготовка псевдо-видео…",
 	"gui.redstone-master.tutorial.video.unavailable": "Псевдо-видео недоступно (нужны кадры frame_00000.png в ресурсах мода).",
 	"gui.redstone-master.settings.search_hint": "Поиск",
