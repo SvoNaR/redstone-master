@@ -19,6 +19,8 @@ public class ModConfig {
 	private static ModConfig instance;
 
 	public double panelScale = 0.8;
+	/** Прозрачность фона окна мода: 100 — полностью прозрачный, 75 — стандарт, 0 — непрозрачный чёрный. */
+	public double panelBackgroundTransparency = 75.0;
 	public boolean pauseOnOpen = true;
 	public boolean highContrastBorders = false;
 	public boolean autoLanguage = true;
@@ -58,6 +60,8 @@ public class ModConfig {
 					instance = new ModConfig();
 				}
 				instance.clampPanelScale();
+				instance.migrateLegacyPanelBackground(json);
+				instance.clampPanelBackgroundTransparency();
 				if (instance.completedTutorialLessons == null) {
 					instance.completedTutorialLessons = new ArrayList<>();
 				}
@@ -84,6 +88,7 @@ public class ModConfig {
 
 	public void save() {
 		this.clampPanelScale();
+		this.clampPanelBackgroundTransparency();
 		try {
 			Files.writeString(getConfigPath(), GSON.toJson(this));
 		} catch (IOException ignored) {
@@ -92,6 +97,31 @@ public class ModConfig {
 
 	private void clampPanelScale() {
 		this.panelScale = Math.clamp(this.panelScale, 0.6, 1.0);
+	}
+
+	private void clampPanelBackgroundTransparency() {
+		this.panelBackgroundTransparency = Math.clamp(Math.round(this.panelBackgroundTransparency), 0.0, 100.0);
+	}
+
+	private void migrateLegacyPanelBackground(String json) {
+		if (json == null || !json.contains("\"panelBackgroundOpacity\"")
+				|| json.contains("\"panelBackgroundTransparency\"")) {
+			return;
+		}
+		try {
+			com.google.gson.JsonObject root = com.google.gson.JsonParser.parseString(json).getAsJsonObject();
+			if (!root.has("panelBackgroundOpacity")) {
+				return;
+			}
+			this.panelBackgroundTransparency = migrateLegacyPanelBackgroundOpacity(
+					root.get("panelBackgroundOpacity").getAsDouble()
+			);
+		} catch (RuntimeException ignored) {
+		}
+	}
+
+	private static double migrateLegacyPanelBackgroundOpacity(double opacity) {
+		return Math.clamp(Math.round((1.0 - opacity) * 100.0), 0.0, 100.0);
 	}
 
 	public static Path getConfigPath() {
@@ -169,6 +199,8 @@ public class ModConfig {
 	public boolean isSettingAtDefault(ModSetting setting) {
 		return switch (setting) {
 			case PANEL_SCALE -> Math.abs(this.panelScale - ModSettingDefaults.PANEL_SCALE) < 0.001;
+			case BACKGROUND_OPACITY ->
+					Math.abs(this.panelBackgroundTransparency - ModSettingDefaults.PANEL_BACKGROUND_TRANSPARENCY) < 0.001;
 			case PAUSE_ON_OPEN -> this.pauseOnOpen == ModSettingDefaults.PAUSE_ON_OPEN;
 			case HIGH_CONTRAST -> this.highContrastBorders == ModSettingDefaults.HIGH_CONTRAST_BORDERS;
 			case AUTO_LANGUAGE -> this.autoLanguage == ModSettingDefaults.AUTO_LANGUAGE;

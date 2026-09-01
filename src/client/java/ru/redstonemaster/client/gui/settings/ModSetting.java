@@ -8,6 +8,11 @@ public enum ModSetting {
 			"gui.redstone-master.settings.panel_scale",
 			"интерфейс размер окна мода panel scale window size"
 	),
+	BACKGROUND_OPACITY(
+			"gui.redstone-master.settings.section.interface",
+			"gui.redstone-master.settings.background_opacity",
+			"интерфейс прозрачность фона окна background opacity transparency"
+	),
 	PAUSE_ON_OPEN(
 			"gui.redstone-master.settings.section.interface",
 			"gui.redstone-master.settings.pause_on_open",

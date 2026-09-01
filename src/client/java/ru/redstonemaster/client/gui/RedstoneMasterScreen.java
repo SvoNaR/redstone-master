@@ -425,15 +425,47 @@ public class RedstoneMasterScreen extends Screen {
 	@Override
 	public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
 		if (this.currentTab == RedstoneMasterTab.TUTORIAL && this.tutorialPanel.isVideoFullscreen()) {
-			if (this.shouldShowTitleMenuPanorama()) {
-				this.renderPanorama(graphics, delta);
-			}
+			this.renderBehindScreen(graphics, mouseX, mouseY, delta);
 			return;
 		}
+		this.renderBehindScreen(graphics, mouseX, mouseY, delta);
+		this.renderPanelBackground(graphics);
+	}
+
+	private void renderBehindScreen(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
 		if (this.shouldShowTitleMenuPanorama()) {
 			this.renderPanorama(graphics, delta);
+			return;
 		}
-		this.renderMenuBackground(graphics, this.panelX, this.panelY, this.panelWidth, this.panelHeight);
+		if (this.minecraft != null && this.minecraft.level != null) {
+			this.renderTransparentBackground(graphics);
+			return;
+		}
+		if (this.previousScreen != null) {
+			this.previousScreen.renderBackground(graphics, mouseX, mouseY, delta);
+			return;
+		}
+		super.renderBackground(graphics, mouseX, mouseY, delta);
+	}
+
+	private void renderPanelBackground(GuiGraphics graphics) {
+		double transparency = Math.clamp(ModConfig.get().panelBackgroundTransparency, 0.0, 100.0);
+		if (transparency >= 100.0) {
+			return;
+		}
+		if (transparency <= 0.0) {
+			graphics.fill(
+					this.panelX,
+					this.panelY,
+					this.panelX + this.panelWidth,
+					this.panelY + this.panelHeight,
+					0xFF000000
+			);
+			return;
+		}
+		int alpha = (int) Math.round((1.0 - transparency / 100.0) * 255.0) & 0xFF;
+		int color = (alpha << 24) | 0x000000;
+		graphics.fill(this.panelX, this.panelY, this.panelX + this.panelWidth, this.panelY + this.panelHeight, color);
 	}
 
 	private boolean shouldShowTitleMenuPanorama() {
@@ -811,6 +843,10 @@ public class RedstoneMasterScreen extends Screen {
 			T widget
 	) {
 		return this.addRenderableWidget(widget);
+	}
+
+	void removeContentWidget(net.minecraft.client.gui.components.events.GuiEventListener widget) {
+		this.removeWidget(widget);
 	}
 
 	int getScreenWidth() {

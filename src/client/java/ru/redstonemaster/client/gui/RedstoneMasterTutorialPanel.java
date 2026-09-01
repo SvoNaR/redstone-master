@@ -194,7 +194,42 @@ final class RedstoneMasterTutorialPanel {
 			return;
 		}
 
-		this.rebuildListWidgets(innerX, innerWidth);
+		this.rebuildListWidgets(innerX, innerWidth, true);
+	}
+
+	void applySearchFilter() {
+		if (this.studyTarget != null) {
+			return;
+		}
+		boolean searchFocused = this.searchBox != null && this.searchBox.isFocused();
+		int cursorPosition = searchFocused ? this.searchBox.getCursorPosition() : 0;
+		this.removeListContentWidgets();
+		this.layoutRows.clear();
+		int innerX = this.screen.getContentX() + RedstoneMasterScreen.CONTENT_INNER_PADDING;
+		int innerWidth = this.screen.getContentWidth() - RedstoneMasterScreen.CONTENT_INNER_PADDING * 2;
+		this.scrollOffset = 0;
+		this.rebuildListWidgets(innerX, innerWidth, false);
+		this.updateSearchBoxLayout();
+		if (searchFocused) {
+			ModSearchEditBox.restoreFocus(this.searchBox, this.screen, cursorPosition);
+		}
+		this.clampScrollOffset();
+		this.applyScrollToControls();
+	}
+
+	private void removeListContentWidgets() {
+		for (Button button : this.sectionToggleButtons) {
+			this.screen.removeContentWidget(button);
+		}
+		for (Button button : this.studyButtons) {
+			this.screen.removeContentWidget(button);
+		}
+		if (this.collapseAllButton != null) {
+			this.screen.removeContentWidget(this.collapseAllButton);
+			this.collapseAllButton = null;
+		}
+		this.sectionToggleButtons.clear();
+		this.studyButtons.clear();
 	}
 
 	private void rebuildStudyWidgets(int innerX, int innerWidth) {
@@ -508,7 +543,7 @@ final class RedstoneMasterTutorialPanel {
 		return this.activeStudyVideoId != null && !this.activeStudyVideoId.isBlank();
 	}
 
-	private void rebuildListWidgets(int innerX, int innerWidth) {
+	private void rebuildListWidgets(int innerX, int innerWidth, boolean recreateSearchBox) {
 		int studyButtonWidth = this.getStudyButtonWidth();
 		int lessonControlsWidth = this.getLessonControlsWidth(studyButtonWidth);
 		int blockInnerX = innerX + SECTION_BLOCK_PADDING;
@@ -600,26 +635,45 @@ final class RedstoneMasterTutorialPanel {
 		this.collapseAllButton.active = !this.expandedSections.isEmpty();
 		this.screen.addContentWidget(this.collapseAllButton);
 
-		this.searchBox = new EditBox(
+		if (recreateSearchBox) {
+			if (this.searchBox != null) {
+				this.screen.removeContentWidget(this.searchBox);
+				this.searchBox = null;
+			}
+			this.ensureSearchBox(innerX, innerWidth);
+		}
+
+		this.clampScrollOffset();
+		this.applyScrollToControls();
+	}
+
+	private void ensureSearchBox(int innerX, int innerWidth) {
+		this.searchBox = ModSearchEditBox.create(
 				this.screen.getFont(),
 				innerX,
 				this.getSearchY(),
 				innerWidth,
 				this.getSearchHeight(),
-				ModContentLanguage.translatable("gui.redstone-master.tutorial.search_hint")
+				"gui.redstone-master.tutorial.search_hint",
+				this.searchQuery,
+				value -> {
+					this.searchQuery = value;
+					this.applySearchFilter();
+				}
 		);
-		this.searchBox.setMaxLength(64);
-		this.searchBox.setHint(ModContentLanguage.translatable("gui.redstone-master.tutorial.search_hint"));
-		this.searchBox.setValue(this.searchQuery);
-		this.searchBox.setResponder(value -> {
-			this.searchQuery = value;
-			this.scrollOffset = 0;
-			this.screen.rebuildTutorialWidgets();
-		});
 		this.screen.addContentWidget(this.searchBox);
+	}
 
-		this.clampScrollOffset();
-		this.applyScrollToControls();
+	private void updateSearchBoxLayout() {
+		int innerX = this.screen.getContentX() + RedstoneMasterScreen.CONTENT_INNER_PADDING;
+		int innerWidth = this.screen.getContentWidth() - RedstoneMasterScreen.CONTENT_INNER_PADDING * 2;
+		ModSearchEditBox.updateBounds(
+				this.searchBox,
+				innerX,
+				this.getSearchY(),
+				innerWidth,
+				this.getSearchHeight()
+		);
 	}
 
 	private int getDisclaimerHeight(int width) {

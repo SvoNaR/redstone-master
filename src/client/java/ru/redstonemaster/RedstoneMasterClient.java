@@ -11,6 +11,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
+import ru.redstonemaster.client.ModOpenKeyGuard;
 import ru.redstonemaster.client.auth.ModWebAuthService;
 import ru.redstonemaster.client.gui.RedstoneMasterScreen;
 import ru.redstonemaster.client.profile.ModAvatarManager;
@@ -96,13 +97,13 @@ public class RedstoneMasterClient implements ClientModInitializer {
 			ScreenKeyboardEvents.beforeKeyPress(screen).register((activeScreen, event) -> {
 				if (openGuiKey.matches(event)) {
 					if (activeScreen instanceof RedstoneMasterScreen modScreen) {
-						if (ModConfig.get().closeOnRepeatKey) {
+						if (!ModOpenKeyGuard.shouldBlock(modScreen) && ModConfig.get().closeOnRepeatKey) {
 							suppressNextOpenKey = true;
 							modScreen.onClose();
 						}
 						while (openGuiKey.consumeClick()) {
 						}
-					} else {
+					} else if (!ModOpenKeyGuard.shouldBlock(activeScreen)) {
 						handleOpenKey(client);
 					}
 					return;
@@ -119,6 +120,9 @@ public class RedstoneMasterClient implements ClientModInitializer {
 	}
 
 	public static void handleOpenKey(net.minecraft.client.Minecraft client) {
+		if (ModOpenKeyGuard.shouldBlock(client.screen)) {
+			return;
+		}
 		if (client.screen instanceof RedstoneMasterScreen modScreen) {
 			if (ModConfig.get().closeOnRepeatKey) {
 				modScreen.onClose();

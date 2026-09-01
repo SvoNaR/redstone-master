@@ -2,12 +2,14 @@ package ru.redstonemaster.client.gui;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.network.chat.Component;
 import ru.redstonemaster.client.gui.settings.ModSetting;
+import ru.redstonemaster.client.gui.settings.PanelBackgroundTransparencySlider;
 import ru.redstonemaster.config.ModConfig;
 import ru.redstonemaster.config.ModContentLanguage;
 
@@ -40,7 +42,7 @@ final class RedstoneMasterSettingsPanel {
 	private String searchQuery = "";
 	private int scrollOffset;
 	private final List<LayoutRow> layoutRows = new ArrayList<>();
-	private final List<Button> valueButtons = new ArrayList<>();
+	private final List<AbstractWidget> valueControls = new ArrayList<>();
 	private final List<Button> resetButtons = new ArrayList<>();
 	private Button resetAllButton;
 
@@ -49,15 +51,43 @@ final class RedstoneMasterSettingsPanel {
 	}
 
 	void rebuildWidgets() {
+		this.removeSettingRowWidgets();
+		if (this.resetAllButton != null) {
+			this.screen.removeContentWidget(this.resetAllButton);
+			this.resetAllButton = null;
+		}
+		if (this.searchBox != null) {
+			this.screen.removeContentWidget(this.searchBox);
+			this.searchBox = null;
+		}
 		this.layoutRows.clear();
-		this.valueButtons.clear();
-		this.resetButtons.clear();
-		this.resetAllButton = null;
+		this.buildSettingRows();
+		this.ensureResetAllButton();
+		this.ensureSearchBox();
+		this.clampScrollOffset();
+		this.applyScrollToControls();
+	}
 
+	void applySearchFilter() {
+		boolean searchFocused = this.searchBox != null && this.searchBox.isFocused();
+		int cursorPosition = searchFocused ? this.searchBox.getCursorPosition() : 0;
+		this.removeSettingRowWidgets();
+		this.layoutRows.clear();
+		this.buildSettingRows();
+		if (this.resetAllButton != null) {
+			this.resetAllButton.active = !ModConfig.get().areAllModSettingsAtDefault();
+		}
+		this.updateSearchBoxLayout();
+		if (searchFocused) {
+			ModSearchEditBox.restoreFocus(this.searchBox, this.screen, cursorPosition);
+		}
+		this.clampScrollOffset();
+		this.applyScrollToControls();
+	}
+
+	private void buildSettingRows() {
 		int innerX = this.screen.getContentX() + RedstoneMasterScreen.CONTENT_INNER_PADDING;
 		int innerWidth = this.screen.getContentWidth() - RedstoneMasterScreen.CONTENT_INNER_PADDING * 2;
-		int searchY = this.getSearchY();
-		int searchHeight = this.getSearchHeight();
 		int y = this.getListTop();
 		int disclaimerHeight = this.getDisclaimerHeight(innerWidth);
 		this.layoutRows.add(LayoutRow.disclaimer(y, disclaimerHeight));
@@ -93,15 +123,19 @@ final class RedstoneMasterSettingsPanel {
 			int rowHeight = this.getSettingRowHeight(lineCount);
 			int buttonY = this.getSettingButtonY(y, rowHeight);
 			this.layoutRows.add(LayoutRow.setting(setting, y, rowHeight));
-			Button valueButton = this.createValueButton(setting, valueButtonX, buttonY, valueButtonWidth);
-			this.valueButtons.add(valueButton);
-			this.screen.addContentWidget(valueButton);
+			AbstractWidget valueControl = this.createValueControl(setting, valueButtonX, buttonY, valueButtonWidth);
+			this.valueControls.add(valueControl);
+			this.screen.addContentWidget(valueControl);
 			Button resetButton = this.createResetButton(setting, resetButtonX, buttonY, resetButtonWidth);
 			this.resetButtons.add(resetButton);
 			this.screen.addContentWidget(resetButton);
 			y += rowHeight + ROW_GAP;
 		}
+	}
 
+	private void ensureResetAllButton() {
+		int innerX = this.screen.getContentX() + RedstoneMasterScreen.CONTENT_INNER_PADDING;
+		int innerWidth = this.screen.getContentWidth() - RedstoneMasterScreen.CONTENT_INNER_PADDING * 2;
 		ModConfig config = ModConfig.get();
 		this.resetAllButton = Button.builder(
 						ModContentLanguage.translatable("gui.redstone-master.settings.reset_all"),
@@ -110,26 +144,48 @@ final class RedstoneMasterSettingsPanel {
 				.build();
 		this.resetAllButton.active = !config.areAllModSettingsAtDefault();
 		this.screen.addContentWidget(this.resetAllButton);
+	}
 
-		this.searchBox = new EditBox(
+	private void ensureSearchBox() {
+		int innerX = this.screen.getContentX() + RedstoneMasterScreen.CONTENT_INNER_PADDING;
+		int innerWidth = this.screen.getContentWidth() - RedstoneMasterScreen.CONTENT_INNER_PADDING * 2;
+		this.searchBox = ModSearchEditBox.create(
 				this.screen.getFont(),
 				innerX,
-				searchY,
+				this.getSearchY(),
 				innerWidth,
-				searchHeight,
-				ModContentLanguage.translatable("gui.redstone-master.settings.search_hint")
+				this.getSearchHeight(),
+				"gui.redstone-master.settings.search_hint",
+				this.searchQuery,
+				value -> {
+					this.searchQuery = value;
+					this.applySearchFilter();
+				}
 		);
-		this.searchBox.setMaxLength(64);
-		this.searchBox.setHint(ModContentLanguage.translatable("gui.redstone-master.settings.search_hint"));
-		this.searchBox.setValue(this.searchQuery);
-		this.searchBox.setResponder(value -> {
-			this.searchQuery = value;
-			this.screen.rebuildSettingsWidgets();
-		});
 		this.screen.addContentWidget(this.searchBox);
+	}
 
-		this.clampScrollOffset();
-		this.applyScrollToControls();
+	private void updateSearchBoxLayout() {
+		int innerX = this.screen.getContentX() + RedstoneMasterScreen.CONTENT_INNER_PADDING;
+		int innerWidth = this.screen.getContentWidth() - RedstoneMasterScreen.CONTENT_INNER_PADDING * 2;
+		ModSearchEditBox.updateBounds(
+				this.searchBox,
+				innerX,
+				this.getSearchY(),
+				innerWidth,
+				this.getSearchHeight()
+		);
+	}
+
+	private void removeSettingRowWidgets() {
+		for (AbstractWidget valueControl : this.valueControls) {
+			this.screen.removeContentWidget(valueControl);
+		}
+		for (Button resetButton : this.resetButtons) {
+			this.screen.removeContentWidget(resetButton);
+		}
+		this.valueControls.clear();
+		this.resetButtons.clear();
 	}
 
 	private int getResetButtonWidth() {
@@ -186,7 +242,7 @@ final class RedstoneMasterSettingsPanel {
 		this.screen.rebuildAllWidgets();
 	}
 
-	private Button createValueButton(ModSetting setting, int x, int y, int width) {
+	private AbstractWidget createValueControl(ModSetting setting, int x, int y, int width) {
 		ModConfig config = ModConfig.get();
 		return switch (setting) {
 			case PANEL_SCALE -> Button.builder(
@@ -197,6 +253,13 @@ final class RedstoneMasterSettingsPanel {
 							})
 					.bounds(x, y, width, ROW_HEIGHT)
 					.build();
+			case BACKGROUND_OPACITY -> new PanelBackgroundTransparencySlider(
+					x,
+					y,
+					width,
+					ROW_HEIGHT,
+					this::updateControlStates
+			);
 			case PAUSE_ON_OPEN -> Button.builder(
 							this.getToggleLabel(config.pauseOnOpen),
 							button -> {
@@ -290,6 +353,23 @@ final class RedstoneMasterSettingsPanel {
 	private Component getPanelScaleLabel(ModConfig config) {
 		int percent = (int) Math.round(config.panelScale * 100);
 		return ModContentLanguage.translatable("gui.redstone-master.settings.panel_scale.value", percent);
+	}
+
+	void updateControlStates() {
+		ModConfig config = ModConfig.get();
+		int settingIndex = 0;
+		for (LayoutRow row : this.layoutRows) {
+			if (row.setting == null) {
+				continue;
+			}
+			if (settingIndex < this.resetButtons.size()) {
+				this.resetButtons.get(settingIndex).active = !config.isSettingAtDefault(row.setting);
+			}
+			settingIndex++;
+		}
+		if (this.resetAllButton != null) {
+			this.resetAllButton.active = !config.areAllModSettingsAtDefault();
+		}
 	}
 
 	private Component getToggleLabel(boolean enabled) {
@@ -409,10 +489,10 @@ final class RedstoneMasterSettingsPanel {
 			}
 			int displayY = this.getSettingButtonY(row.y - this.scrollOffset, row.rowHeight);
 			boolean visible = displayY >= listTop - 1 && displayY + ROW_HEIGHT <= scrollBottom + 1;
-			if (settingIndex < this.valueButtons.size()) {
-				Button valueButton = this.valueButtons.get(settingIndex);
-				valueButton.setY(displayY);
-				valueButton.visible = visible;
+			if (settingIndex < this.valueControls.size()) {
+				AbstractWidget valueControl = this.valueControls.get(settingIndex);
+				valueControl.setY(displayY);
+				valueControl.visible = visible;
 			}
 			if (settingIndex < this.resetButtons.size()) {
 				Button resetButton = this.resetButtons.get(settingIndex);
@@ -487,7 +567,7 @@ final class RedstoneMasterSettingsPanel {
 		this.searchBox = null;
 		this.resetAllButton = null;
 		this.layoutRows.clear();
-		this.valueButtons.clear();
+		this.valueControls.clear();
 		this.resetButtons.clear();
 	}
 

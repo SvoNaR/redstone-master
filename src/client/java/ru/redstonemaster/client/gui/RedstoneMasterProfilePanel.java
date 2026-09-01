@@ -23,8 +23,8 @@ final class RedstoneMasterProfilePanel {
 	private static final int SIDEBAR_WIDTH = 96;
 	private static final int AVATAR_DISPLAY_SIZE = 56;
 	private static final int AVATAR_FRAME = 2;
-	private static final int CARD_BG = 0xD92B2118;
-	private static final int CARD_BORDER = 0xFF6B5344;
+	private static final int CARD_BG = 0xD9000000;
+	private static final int CARD_BORDER = 0xFF404040;
 	private static final int LABEL_COLOR = 0xFF9CA3AF;
 	private static final int VALUE_COLOR = 0xFFFFFFFF;
 	private static final int SECTION_COLOR = 0xFFE8C070;

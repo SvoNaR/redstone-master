@@ -7,6 +7,7 @@ import ru.redstonemaster.config.ModConfig;
  */
 public final class ModSettingDefaults {
 	public static final double PANEL_SCALE = 0.8;
+	public static final double PANEL_BACKGROUND_TRANSPARENCY = 75.0;
 	public static final boolean PAUSE_ON_OPEN = true;
 	public static final boolean HIGH_CONTRAST_BORDERS = false;
 	public static final boolean AUTO_LANGUAGE = true;
@@ -20,6 +21,7 @@ public final class ModSettingDefaults {
 	public static void apply(ModConfig config, ModSetting setting) {
 		switch (setting) {
 			case PANEL_SCALE -> config.panelScale = PANEL_SCALE;
+			case BACKGROUND_OPACITY -> config.panelBackgroundTransparency = PANEL_BACKGROUND_TRANSPARENCY;
 			case PAUSE_ON_OPEN -> config.pauseOnOpen = PAUSE_ON_OPEN;
 			case HIGH_CONTRAST -> config.highContrastBorders = HIGH_CONTRAST_BORDERS;
 			case AUTO_LANGUAGE -> {
